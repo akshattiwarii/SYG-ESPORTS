@@ -228,6 +228,9 @@ function initDb() {
   try { db.exec("ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 1"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN otp_code TEXT DEFAULT ''"); } catch (e) {}
   try { db.exec("ALTER TABLE registrations ADD COLUMN user_id INTEGER"); } catch (e) {}
+  try { db.exec("ALTER TABLE tournaments ADD COLUMN room_id TEXT DEFAULT ''"); } catch (e) {}
+  try { db.exec("ALTER TABLE tournaments ADD COLUMN room_pass TEXT DEFAULT ''"); } catch (e) {}
+  try { db.exec("ALTER TABLE tournaments ADD COLUMN room_notes TEXT DEFAULT ''"); } catch (e) {}
 
   const existingAdmin = db.prepare('SELECT id FROM users WHERE role = ?').get('admin');
   if (!existingAdmin) {
@@ -511,7 +514,11 @@ app.post('/api/auth/verify-signup', (req, res) => {
 
 
 app.get('/api/tournaments', (req, res) => {
-  const rows = db.prepare('SELECT * FROM tournaments ORDER BY date ASC').all();
+  const rows = db.prepare(`
+    SELECT id, title, mode, date, time, prize, fee, slots_total, slots_filled, status, deadline
+    FROM tournaments
+    ORDER BY date ASC
+  `).all();
   res.json(rows);
 });
 
@@ -839,6 +846,64 @@ app.delete('/api/contacts/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+// Tournament Lobbies - Set Room Credentials (Admin only)
+app.post('/api/admin/tournaments/:id/room', (req, res) => {
+  const user = getLoggedInUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const { id } = req.params;
+  const { roomId, roomPass, roomNotes } = req.body;
+  try {
+    db.prepare(`
+      UPDATE tournaments
+      SET room_id = ?, room_pass = ?, room_notes = ?
+      WHERE id = ?
+    `).run(roomId || '', roomPass || '', roomNotes || '', id);
+    res.json({ success: true, message: 'Lobby credentials updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update lobby details' });
+  }
+});
+
+// Tournament Lobbies - Get Room Credentials (Registered Users only)
+app.get('/api/tournaments/:id/room', (req, res) => {
+  const user = getLoggedInUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const { id } = req.params;
+  try {
+    // Check if the user is registered and verified for this tournament
+    const registration = db.prepare(`
+      SELECT id FROM registrations
+      WHERE tournament_id = ? AND user_id = ? AND verified = 1
+    `).get(id, user.id);
+
+    // Allow viewing if the user has a verified slot, OR if they are the admin
+    if (!registration && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: You must be a registered participant to view lobby credentials.' });
+    }
+
+    const tournament = db.prepare('SELECT room_id, room_pass, room_notes FROM tournaments WHERE id = ?').get(id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    res.json({
+      roomId: tournament.room_id || '',
+      roomPass: tournament.room_pass || '',
+      roomNotes: tournament.room_notes || ''
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch lobby details' });
   }
 });
 

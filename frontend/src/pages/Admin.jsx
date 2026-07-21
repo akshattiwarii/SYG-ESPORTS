@@ -24,6 +24,9 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
   const [contacts, setContacts] = useState([])
   const [loadingContacts, setLoadingContacts] = useState(false)
 
+  // Room Coordinates State
+  const [roomModal, setRoomModal] = useState({ open: false, tournamentId: '', title: '', roomId: '', roomPass: '', roomNotes: '' })
+
   const isAccessGranted = loggedIn && user && user.role === 'admin'
 
   // Update results form structure when selected tournament changes
@@ -114,6 +117,53 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
       if (!res.ok) throw new Error('Failed to delete message')
       showToast('Message deleted successfully ✓')
       fetchContacts()
+    } catch (err) {
+      showToast(`⚠ ${err.message}`, 'error')
+    }
+  }
+
+  const handleOpenRoomModal = async (t) => {
+    setRoomModal({
+      open: true,
+      tournamentId: t.id,
+      title: t.title,
+      roomId: '',
+      roomPass: '',
+      roomNotes: ''
+    })
+    try {
+      const res = await fetch(`/api/tournaments/${t.id}/room`)
+      if (res.ok) {
+        const data = await res.json()
+        setRoomModal(prev => ({
+          ...prev,
+          roomId: data.roomId || '',
+          roomPass: data.roomPass || '',
+          roomNotes: data.roomNotes || ''
+        }))
+      }
+    } catch (err) {
+      console.error('Failed to load room details', err)
+    }
+  }
+
+  const handleSaveRoomDetails = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await fetch(`/api/admin/tournaments/${roomModal.tournamentId}/room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: roomModal.roomId,
+          roomPass: roomModal.roomPass,
+          roomNotes: roomModal.roomNotes
+        })
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to update credentials')
+      showToast('Lobby credentials updated successfully ✓')
+      setRoomModal({ open: false, tournamentId: '', title: '', roomId: '', roomPass: '', roomNotes: '' })
+      refreshData()
     } catch (err) {
       showToast(`⚠ ${err.message}`, 'error')
     }
@@ -375,6 +425,7 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
                       <span className="badge-dot"></span>{t.status}
                     </span>
                     <span style={{ display: 'flex', gap: '6px' }}>
+                      <button className="icon-btn" title="Manage Room Info" onClick={() => handleOpenRoomModal(t)}>🔑</button>
                       <button className="icon-btn" title="Cycle Status" onClick={() => handleCycleStatus(t.id, t.status)}>↻</button>
                       <button className="icon-btn" title="Delete" onClick={() => handleDeleteTournament(t.id)}>🗑</button>
                     </span>
@@ -588,6 +639,57 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
               </div>
             </div>
           )}
+        {roomModal.open && (
+          <div className="modal-backdrop" onClick={() => setRoomModal({ open: false, tournamentId: '', title: '', roomId: '', roomPass: '', roomNotes: '' })}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+              <div className="modal-head">
+                <h3>Lobby Coordinates — {roomModal.title}</h3>
+                <div className="modal-close" style={{ cursor: 'pointer' }} onClick={() => setRoomModal({ open: false, tournamentId: '', title: '', roomId: '', roomPass: '', roomNotes: '' })}>✕</div>
+              </div>
+              <form onSubmit={handleSaveRoomDetails}>
+                <div className="modal-body">
+                  <p style={{ color: 'var(--text-dim)', fontSize: '13px', lineHeight: 1.4, marginBottom: '16px' }}>
+                    Set the Custom Room ID and Password. Only verified registered participants will be able to unlock and view this data from their dashboards.
+                  </p>
+                  <div className="field-row">
+                    <div className="field">
+                      <label>Room ID</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. 1234567" 
+                        value={roomModal.roomId}
+                        onChange={e => setRoomModal(prev => ({ ...prev, roomId: e.target.value }))}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Room Password</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. 98765" 
+                        value={roomModal.roomPass}
+                        onChange={e => setRoomModal(prev => ({ ...prev, roomPass: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label>Special Instructions / Notes</label>
+                    <textarea 
+                      rows="3" 
+                      placeholder="e.g. Lobby opens at 7:50 PM. Map: Bermuda. Do not share credentials!" 
+                      value={roomModal.roomNotes}
+                      onChange={e => setRoomModal(prev => ({ ...prev, roomNotes: e.target.value }))}
+                      style={{ width: '100%', background: 'var(--panel-2)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '11px 13px', borderRadius: '9px', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <button type="button" className="btn btn-ghost" onClick={() => setRoomModal({ open: false, tournamentId: '', title: '', roomId: '', roomPass: '', roomNotes: '' })}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Save Lobby Info</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </section>
