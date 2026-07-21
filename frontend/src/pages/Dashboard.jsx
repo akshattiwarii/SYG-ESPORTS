@@ -85,25 +85,27 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
         <div className="dash-grid">
           <div className="dash-sidebar panel">
             <div className="dash-profile">
-              <div className="dash-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="dash-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {user.avatar ? (
                   <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                 ) : (
                   initials(user.ign || user.name)
                 )}
               </div>
-              <h3 style={{ fontSize: '18px', marginBottom: '2px', color: 'var(--text)' }}>
-                {user.ign || 'Player'}
-              </h3>
-              <p style={{ color: 'var(--cyan)', fontSize: '12.5px', marginBottom: '8px', fontWeight: 600 }}>
-                @{user.email ? user.email.split('@')[0] : 'user'}
-              </p>
-              <p style={{ color: 'var(--text-dim)', fontSize: '12px', marginBottom: '6px' }}>
-                {user.name || 'SYG ESPORTS Gamer'}
-              </p>
-              <p style={{ color: 'var(--text-faint)', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', userSelect: 'all' }}>
-                UID: {user.uid || '—'}
-              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: '2px', textAlign: 'left', flex: 1 }}>
+                <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.ign || 'Player'}
+                </h3>
+                <p style={{ color: 'var(--cyan)', fontSize: '12.5px', margin: 0, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  @{user.email ? user.email.split('@')[0] : 'user'}
+                </p>
+                <p style={{ color: 'var(--text-dim)', fontSize: '12px', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.name || 'SYG ESPORTS Gamer'}
+                </p>
+                <p style={{ color: 'var(--text-faint)', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', userSelect: 'all', margin: 0 }}>
+                  UID: {user.uid || '—'}
+                </p>
+              </div>
             </div>
             <div className="dash-nav">
               <a className="active" style={{ cursor: 'default' }}>📋 Registrations</a>
