@@ -24,10 +24,71 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
   const [contacts, setContacts] = useState([])
   const [loadingContacts, setLoadingContacts] = useState(false)
 
+  // Messaging Console state
+  const [allUsers, setAllUsers] = useState([])
+  const [userSearchQuery, setUserSearchQuery] = useState('')
+  const [selectedRecipient, setSelectedRecipient] = useState({ isBroadcast: true })
+  const [adminMessages, setAdminMessages] = useState([])
+  const [messageText, setMessageText] = useState('')
+  const [loadingMessages, setLoadingMessages] = useState(false)
+
   // Room Coordinates State
   const [roomModal, setRoomModal] = useState({ open: false, tournamentId: '', title: '', roomId: '', roomPass: '', roomNotes: '' })
 
   const isAccessGranted = loggedIn && user && user.role === 'admin'
+
+  const fetchUsersAndMessages = async () => {
+    setLoadingMessages(true)
+    try {
+      const [uRes, mRes] = await Promise.all([
+        fetch('/api/admin/users'),
+        fetch('/api/admin/messages')
+      ])
+      if (uRes.ok) {
+        const uData = await uRes.json()
+        setAllUsers(uData)
+      }
+      if (mRes.ok) {
+        const mData = await mRes.json()
+        setAdminMessages(mData)
+      }
+    } catch (e) {
+      console.error('Failed to load messaging data', e)
+    } finally {
+      setLoadingMessages(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'messages' && isAccessGranted) {
+      fetchUsersAndMessages()
+    }
+  }, [activeTab, isAccessGranted])
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault()
+    if (!messageText.trim()) return
+
+    try {
+      const body = selectedRecipient.isBroadcast
+        ? { message: messageText, isBroadcast: true }
+        : { recipientId: selectedRecipient.id, message: messageText, isBroadcast: false }
+
+      const res = await fetch('/api/admin/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to send message')
+
+      showToast(json.message || 'Message sent! ✓')
+      setMessageText('')
+      await fetchUsersAndMessages()
+    } catch (err) {
+      showToast(`⚠ ${err.message || 'Failed to send message'}`, 'error')
+    }
+  }
 
   // Update results form structure when selected tournament changes
   useEffect(() => {
@@ -342,6 +403,14 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
               </span>
             )}
           </button>
+          <button 
+            className={`btn btn-sm ${activeTab === 'messages' ? 'btn-primary' : 'btn-ghost'}`} 
+            onClick={() => setActiveTab('messages')}
+            type="button"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            💬 Player Messages & Broadcast
+          </button>
         </div>
 
         <div id="adminProtectedContent">
@@ -639,6 +708,214 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'messages' && (
+            <div className="panel" style={{ padding: '22px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h3 style={{ fontSize: '18px', margin: 0 }}>Player Messaging Console</h3>
+                  <div style={{ color: 'var(--text-dim)', fontSize: '12.5px', marginTop: '2px' }}>
+                    Chat directly with registered players or send broadcast announcements to everyone at once.
+                  </div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={fetchUsersAndMessages} disabled={loadingMessages} type="button">
+                  {loadingMessages ? 'Refreshing...' : '↻ Refresh Chats'}
+                </button>
+              </div>
+
+              {/* 2-Column Messaging Portal Layout */}
+              <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px', minHeight: '520px' }} className="dash-grid">
+                
+                {/* Left Column: User Selection & Search */}
+                <div className="panel-2" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Search Bar */}
+                  <input 
+                    type="text" 
+                    placeholder="🔍 Search IGN, Name, UID or Email..." 
+                    value={userSearchQuery}
+                    onChange={e => setUserSearchQuery(e.target.value)}
+                    style={{ width: '100%', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '9px 12px', borderRadius: '8px', fontSize: '12.5px' }}
+                  />
+
+                  {/* Broadcast Option */}
+                  <div 
+                    onClick={() => setSelectedRecipient({ isBroadcast: true })}
+                    style={{ 
+                      padding: '12px', 
+                      borderRadius: '10px', 
+                      background: selectedRecipient.isBroadcast ? 'var(--orange-soft)' : 'var(--panel)',
+                      border: selectedRecipient.isBroadcast ? '1px solid var(--orange)' : '1px solid var(--border)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}
+                  >
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'var(--orange)', color: '#160800', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px' }}>
+                      📢
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '13.5px', color: selectedRecipient.isBroadcast ? 'var(--orange-2)' : 'var(--text)' }}>
+                        Broadcast to All Players
+                      </div>
+                      <div style={{ color: 'var(--text-faint)', fontSize: '11px' }}>
+                        Send notice to all {allUsers.length} registered accounts
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faint)', marginTop: '6px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
+                    Registered Accounts ({allUsers.length})
+                  </div>
+
+                  {/* User List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '380px' }}>
+                    {allUsers
+                      .filter(u => {
+                        if (!userSearchQuery.trim()) return true
+                        const q = userSearchQuery.toLowerCase()
+                        return (
+                          (u.ign && u.ign.toLowerCase().includes(q)) ||
+                          (u.email && u.email.toLowerCase().includes(q)) ||
+                          (u.uid && u.uid.toLowerCase().includes(q))
+                        )
+                      })
+                      .map(u => {
+                        const isSelected = !selectedRecipient.isBroadcast && selectedRecipient.id === u.id
+                        return (
+                          <div 
+                            key={u.id}
+                            onClick={() => setSelectedRecipient(u)}
+                            style={{ 
+                              padding: '10px 12px', 
+                              borderRadius: '8px', 
+                              background: isSelected ? 'var(--orange-soft)' : 'var(--panel)',
+                              border: isSelected ? '1px solid var(--orange)' : '1px solid var(--border)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px'
+                            }}
+                          >
+                            <div className="mini-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: '32px', height: '32px', fontSize: '12px' }}>
+                              {u.avatar ? (
+                                <img src={u.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                              ) : (
+                                (u.ign || u.email || 'PL').substring(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: '13px', color: isSelected ? 'var(--orange-2)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {u.ign || 'Player'} {u.role === 'admin' ? '🛡️' : ''}
+                              </div>
+                              <div style={{ color: 'var(--text-faint)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                @{u.email.split('@')[0]} · UID: {u.uid || 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    }
+                  </div>
+                </div>
+
+                {/* Right Column: Chat Window & Composer */}
+                <div className="panel-2" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  {/* Chat Header */}
+                  <div style={{ paddingBottom: '12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {selectedRecipient.isBroadcast ? (
+                        <>
+                          <span style={{ fontSize: '20px' }}>📢</span>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--orange-2)' }}>Broadcast Announcement</div>
+                            <div style={{ color: 'var(--text-faint)', fontSize: '11.5px' }}>Sends a public alert to every user dashboard inbox</div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mini-avatar" style={{ overflow: 'hidden', width: '36px', height: '36px', flexShrink: 0 }}>
+                            {selectedRecipient.avatar ? (
+                              <img src={selectedRecipient.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                            ) : (
+                              (selectedRecipient.ign || selectedRecipient.email || 'PL').substring(0, 2).toUpperCase()
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '15px' }}>{selectedRecipient.ign || 'Player'}</div>
+                            <div style={{ color: 'var(--text-dim)', fontSize: '11.5px' }}>{selectedRecipient.email} · Phone: {selectedRecipient.phone || 'N/A'}</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Message History Body */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '14px 4px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '360px' }}>
+                    {adminMessages
+                      .filter(m => {
+                        if (selectedRecipient.isBroadcast) return m.is_broadcast === 1
+                        return (m.sender_id === selectedRecipient.id || m.recipient_id === selectedRecipient.id) && m.is_broadcast !== 1
+                      })
+                      .map((m, idx) => {
+                        const isAdminMsg = m.sender_id === user.id
+                        return (
+                          <div 
+                            key={idx} 
+                            style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              alignItems: isAdminMsg ? 'flex-end' : 'flex-start',
+                              maxWidth: '85%',
+                              alignSelf: isAdminMsg ? 'flex-end' : 'flex-start'
+                            }}
+                          >
+                            <div style={{ fontSize: '10.5px', color: 'var(--text-faint)', marginBottom: '3px', fontFamily: 'JetBrains Mono, monospace' }}>
+                              {m.sender_name} · {new Date(m.created_at).toLocaleString('en-IN', { timeStyle: 'short', dateStyle: 'short' })}
+                            </div>
+                            <div style={{ 
+                              padding: '10px 14px', 
+                              borderRadius: isAdminMsg ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                              background: isAdminMsg ? 'linear-gradient(135deg, var(--orange-2), var(--orange))' : 'var(--panel)',
+                              color: isAdminMsg ? '#160800' : 'var(--text)',
+                              fontWeight: isAdminMsg ? 600 : 400,
+                              fontSize: '13.5px',
+                              lineHeight: 1.45,
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                              border: isAdminMsg ? 'none' : '1px solid var(--border-strong)'
+                            }}>
+                              {m.message}
+                            </div>
+                          </div>
+                        )
+                      })
+                    }
+
+                    {adminMessages.filter(m => selectedRecipient.isBroadcast ? m.is_broadcast === 1 : (m.sender_id === selectedRecipient.id || m.recipient_id === selectedRecipient.id)).length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-faint)', fontSize: '13px' }}>
+                        💬 No message history yet. Type a message below to start the conversation!
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Message Composer Input */}
+                  <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+                    <input 
+                      type="text" 
+                      placeholder={selectedRecipient.isBroadcast ? "Type broadcast announcement to all users..." : `Type message to ${selectedRecipient.ign || 'player'}...`}
+                      value={messageText}
+                      onChange={e => setMessageText(e.target.value)}
+                      style={{ flex: 1, background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--text)', padding: '10px 14px', borderRadius: '9px', fontSize: '13.5px' }}
+                      required
+                    />
+                    <button type="submit" className="btn btn-primary" style={{ padding: '10px 18px', gap: '6px' }}>
+                      {selectedRecipient.isBroadcast ? '📢 Broadcast' : 'Send 💬'}
+                    </button>
+                  </form>
+                </div>
               </div>
             </div>
           )}

@@ -280,6 +280,18 @@ async function initDb() {
       resolved INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id INTEGER,
+      sender_name TEXT NOT NULL,
+      recipient_name TEXT,
+      message TEXT NOT NULL,
+      is_broadcast INTEGER DEFAULT 0,
+      read_status INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Migrations for existing DB tables:
@@ -830,6 +842,116 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// ================= MESSAGING PORTAL API =================
+
+// Admin: Get List of All Registered Users for Search & Messaging
+app.get('/api/admin/users', async (req, res) => {
+  if (!(await isAdminAuthed(req))) return res.status(401).json({ error: 'Admin access required' });
+
+  try {
+    const users = await db.prepare(`
+      SELECT id, email, ign, uid, phone, discord, avatar, role, created_at
+      FROM users
+      ORDER BY created_at DESC
+    `).all();
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Admin: Send Direct Message or Broadcast to All Users
+app.post('/api/admin/messages/send', async (req, res) => {
+  const adminUser = await getLoggedInUser(req);
+  if (!adminUser || adminUser.role !== 'admin') {
+    return res.status(401).json({ error: 'Admin access required' });
+  }
+
+  const { recipientId, message, isBroadcast } = req.body;
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'Message text cannot be empty' });
+  }
+
+  try {
+    if (isBroadcast) {
+      await db.prepare(`
+        INSERT INTO messages (sender_id, recipient_id, sender_name, recipient_name, message, is_broadcast, read_status)
+        VALUES (?, NULL, ?, 'All Registered Players', ?, 1, 0)
+      `).run(adminUser.id, adminUser.ign || 'SYG Admin', message.trim());
+      
+      return res.json({ success: true, message: 'Broadcast announcement sent to all users! 📢' });
+    } else {
+      if (!recipientId) return res.status(400).json({ error: 'Recipient user ID is required' });
+      
+      const targetUser = await db.prepare('SELECT id, ign, email FROM users WHERE id = ?').get(recipientId);
+      if (!targetUser) return res.status(404).json({ error: 'Recipient user not found' });
+
+      await db.prepare(`
+        INSERT INTO messages (sender_id, recipient_id, sender_name, recipient_name, message, is_broadcast, read_status)
+        VALUES (?, ?, ?, ?, ?, 0, 0)
+      `).run(adminUser.id, targetUser.id, adminUser.ign || 'SYG Admin', targetUser.ign || targetUser.email, message.trim());
+
+      return res.json({ success: true, message: `Message sent to ${targetUser.ign || targetUser.email}! 💬` });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Admin: Get All Sent & Received Messages
+app.get('/api/admin/messages', async (req, res) => {
+  if (!(await isAdminAuthed(req))) return res.status(401).json({ error: 'Admin access required' });
+
+  try {
+    const rows = await db.prepare(`
+      SELECT messages.*, users.avatar as sender_avatar
+      FROM messages
+      LEFT JOIN users ON users.id = messages.sender_id
+      ORDER BY messages.created_at ASC
+    `).all();
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch admin messages' });
+  }
+});
+
+// User: Get Inbox Messages (Direct + Broadcast)
+app.get('/api/messages', async (req, res) => {
+  const user = await getLoggedInUser(req);
+  if (!user) return res.json([]);
+
+  try {
+    const rows = await db.prepare(`
+      SELECT messages.*, users.avatar as sender_avatar
+      FROM messages
+      LEFT JOIN users ON users.id = messages.sender_id
+      WHERE messages.recipient_id = ? OR messages.is_broadcast = 1 OR messages.sender_id = ?
+      ORDER BY messages.created_at DESC
+    `).all(user.id, user.id);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch inbox messages' });
+  }
+});
+
+// User: Mark Message as Read
+app.post('/api/messages/:id/read', async (req, res) => {
+  const user = await getLoggedInUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    await db.prepare('UPDATE messages SET read_status = 1 WHERE id = ? AND (recipient_id = ? OR is_broadcast = 1)').run(req.params.id, user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update read status' });
   }
 });
 

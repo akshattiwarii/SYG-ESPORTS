@@ -2,6 +2,36 @@ import { useState } from 'react'
 
 function Dashboard({ loggedIn, user, registrations, openAuth }) {
   const [roomDetails, setRoomDetails] = useState({ open: false, tournamentTitle: '', roomId: '', roomPass: '', roomNotes: '', loading: false })
+  const [dashTab, setDashTab] = useState('registrations')
+  const [userMessages, setUserMessages] = useState([])
+  const [loadingInbox, setLoadingInbox] = useState(false)
+
+  const fetchInbox = async () => {
+    if (!loggedIn) return
+    setLoadingInbox(true)
+    try {
+      const res = await fetch('/api/messages')
+      if (res.ok) {
+        const data = await res.json()
+        setUserMessages(data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch inbox', e)
+    } finally {
+      setLoadingInbox(false)
+    }
+  }
+
+  const handleMarkRead = async (msgId) => {
+    try {
+      await fetch(`/api/messages/${msgId}/read`, { method: 'POST' })
+      setUserMessages(prev => prev.map(m => m.id === msgId ? { ...m, read_status: 1 } : m))
+    } catch (e) {
+      console.error('Failed to mark read', e)
+    }
+  }
+
+  const unreadCount = userMessages.filter(m => !m.read_status && m.sender_id !== user.id).length
 
   const handleFetchRoomDetails = async (reg) => {
     setRoomDetails({
@@ -108,8 +138,25 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
               </div>
             </div>
             <div className="dash-nav">
-              <a className="active" style={{ cursor: 'default' }}>📋 Registrations</a>
-              <a style={{ cursor: 'default', opacity: 0.5 }}>🏆 Scrim Status</a>
+              <a 
+                className={dashTab === 'registrations' ? 'active' : ''} 
+                onClick={() => setDashTab('registrations')} 
+                style={{ cursor: 'pointer' }}
+              >
+                📋 Registrations
+              </a>
+              <a 
+                className={dashTab === 'inbox' ? 'active' : ''} 
+                onClick={() => { setDashTab('inbox'); fetchInbox(); }} 
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              >
+                💬 Inbox
+                {unreadCount > 0 && (
+                  <span style={{ background: 'var(--orange)', color: '#160800', fontSize: '10px', fontWeight: 'bold', padding: '1px 6px', borderRadius: '99px' }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </a>
             </div>
           </div>
 
@@ -133,8 +180,75 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
               </div>
             </div>
 
-            <div className="panel" style={{ padding: '22px', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Your Registrations</h3>
+            {dashTab === 'inbox' ? (
+              <div className="panel" style={{ padding: '22px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '18px', margin: 0 }}>Message Inbox</h3>
+                    <div style={{ color: 'var(--text-dim)', fontSize: '12.5px', marginTop: '2px' }}>
+                      Official notifications, prize payment updates, and admin replies.
+                    </div>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={fetchInbox} disabled={loadingInbox} type="button">
+                    {loadingInbox ? 'Refreshing...' : '↻ Refresh Inbox'}
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {userMessages.map((m) => (
+                    <div 
+                      key={m.id} 
+                      className="panel-2" 
+                      style={{ 
+                        padding: '16px', 
+                        borderRadius: '12px', 
+                        border: m.is_broadcast ? '1px solid var(--orange)' : '1px solid var(--border)',
+                        background: m.read_status ? 'var(--panel-2)' : 'rgba(255,90,31,0.06)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>{m.is_broadcast ? '📢' : '💬'}</span>
+                          <span style={{ fontWeight: 700, fontSize: '14px', color: m.is_broadcast ? 'var(--orange-2)' : 'var(--text)' }}>
+                            {m.sender_name} {m.is_broadcast ? '(Broadcast Notice)' : ''}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-faint)', fontFamily: 'JetBrains Mono, monospace' }}>
+                            {new Date(m.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                          {!m.read_status && m.sender_id !== user.id && (
+                            <button 
+                              className="btn btn-cyan btn-sm" 
+                              style={{ padding: '3px 8px', fontSize: '10.5px' }}
+                              onClick={() => handleMarkRead(m.id)}
+                            >
+                              Mark Read ✓
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--text-dim)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        {m.message}
+                      </p>
+                    </div>
+                  ))}
+
+                  {userMessages.length === 0 && (
+                    <div className="empty">
+                      <div className="eb">📬</div>
+                      <h4>Your inbox is clean!</h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-faint)', marginTop: '4px' }}>
+                        When admins send you a direct message or announcement, it will appear here.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="panel" style={{ padding: '22px', marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Your Registrations</h3>
               <div id="dashRegistrations" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {registrations.map((r) => (
                   <div className="panel" style={{ padding: '14px', background: 'var(--panel-2)', border: '1px solid var(--border)', maxWidth: '100%' }} key={r.id}>
@@ -213,6 +327,8 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
                 </table>
               </div>
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>
