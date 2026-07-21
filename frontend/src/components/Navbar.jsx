@@ -10,6 +10,21 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
     setMobileOpen(false)
   }
 
+  // Lock background body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.touchAction = 'none'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+  }, [mobileOpen])
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {

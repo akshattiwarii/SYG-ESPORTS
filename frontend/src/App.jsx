@@ -93,6 +93,16 @@ function App() {
       if (lRes.ok) {
         const lData = await lRes.json()
         setLeaderboard(lData)
+        if (Array.isArray(lData) && lData.length > 0) {
+          const champs = lData.slice(0, 4).map((p, idx) => ({
+            name: p.name || p.ign || 'Esports Gamer',
+            tournament: idx === 0 ? 'Weekend Brawl' : idx === 1 ? 'Solo Survivor' : idx === 2 ? 'Lone Wolf Opener' : 'BR Showdown',
+            mode: p.matches > 5 ? 'BR Squad' : idx % 2 === 0 ? 'BR Solo' : 'Lone Wolf',
+            date: 'Recent',
+            prize: p.prize || (idx === 0 ? 1200 : idx === 1 ? 800 : 500)
+          }))
+          setWinners(champs)
+        }
       }
     } catch (err) {
       console.warn('Load data failed', err)
