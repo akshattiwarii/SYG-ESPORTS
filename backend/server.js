@@ -855,6 +855,7 @@ app.get('/api/admin/users', async (req, res) => {
     const users = await db.prepare(`
       SELECT id, email, ign, uid, phone, discord, avatar, role, created_at
       FROM users
+      WHERE role != 'admin' OR role IS NULL
       ORDER BY created_at DESC
     `).all();
     res.json(users);

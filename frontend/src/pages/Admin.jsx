@@ -762,18 +762,19 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
                         Broadcast to All Players
                       </div>
                       <div style={{ color: 'var(--text-faint)', fontSize: '11px' }}>
-                        Send notice to all {allUsers.length} registered accounts
+                        Send notice to all {allUsers.filter(u => u.role !== 'admin' && u.id !== user.id).length} registered players
                       </div>
                     </div>
                   </div>
 
                   <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faint)', marginTop: '6px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
-                    Registered Accounts ({allUsers.length})
+                    Registered Players ({allUsers.filter(u => u.role !== 'admin' && u.id !== user.id).length})
                   </div>
 
                   {/* User List */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '380px' }}>
                     {allUsers
+                      .filter(u => u.role !== 'admin' && u.id !== user.id)
                       .filter(u => {
                         if (!userSearchQuery.trim()) return true
                         const q = userSearchQuery.toLowerCase()
