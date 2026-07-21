@@ -99,12 +99,12 @@ footer{border-top:1px solid var(--border);padding:48px 0 28px;margin-top:40px;ba
 
 /* Mobile Dashboard Resolution Optimization */
 @media(max-width: 640px) {
-  .dash-sidebar { padding: 12px !important; }
+  .dash-sidebar { padding: 14px !important; }
   .dash-profile { gap: 10px !important; }
-  .dash-avatar { width: 44px !important; height: 44px !important; font-size: 16px !important; }
-  .dash-nav a { padding: 8px 10px !important; font-size: 12px !important; }
-  .kpi-row { gap: 8px !important; }
-  .kpi { padding: 12px 10px !important; }
-  .kpi-label { font-size: 9.5px !important; letter-spacing: 0.03em !important; }
-  .kpi-value { font-size: 20px !important; }
+  .dash-avatar { width: 50px !important; height: 50px !important; font-size: 18px !important; }
+  .dash-nav a { padding: 10px 12px !important; font-size: 13px !important; }
+  .kpi-row { grid-template-columns: 1fr !important; gap: 10px !important; }
+  .kpi { padding: 16px 18px !important; }
+  .kpi-label { font-size: 11px !important; letter-spacing: 0.06em !important; }
+  .kpi-value { font-size: 24px !important; }
 }
