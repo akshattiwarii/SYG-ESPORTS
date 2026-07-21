@@ -48,6 +48,7 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
             <a className={activePage === 'rules' ? 'active' : ''} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('rules')}>Rules</a>
             <a className={activePage === 'community' ? 'active' : ''} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('community')}>Community</a>
             <a className={activePage === 'contact' ? 'active' : ''} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('contact')}>Contact</a>
+            <a href="https://web2apkpro.com/public_download.php?project_id=19997&token=b86bbd4da6" target="_blank" rel="noreferrer" style={{ color: 'var(--orange-2)', fontWeight: 700 }}>Download App 📱</a>
           </div>
           <div className="nav-cta">
             {loggedIn && (
@@ -161,6 +162,7 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
           <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('rules')}>Rules</a>
           <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('community')}>Community</a>
           <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('contact')}>Contact</a>
+          <a href="https://web2apkpro.com/public_download.php?project_id=19997&token=b86bbd4da6" target="_blank" rel="noreferrer" style={{ color: 'var(--orange-2)', fontWeight: 700 }}>Download App 📱</a>
           {loggedIn && <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('dashboard')}>Dashboard</a>}
           {loggedIn && user.role === 'admin' && <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('admin')}>Admin</a>}
           {loggedIn && (
