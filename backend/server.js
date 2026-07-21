@@ -257,20 +257,37 @@ app.post('/api/auth/signup', (req, res) => {
     const uidExists = db.prepare('SELECT id FROM users WHERE uid = ?').get(uid);
     if (uidExists) return res.status(400).json({ error: 'Free Fire UID is already registered' });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Insert user (unverified)
+    // Insert user (verified immediately)
     const info = db.prepare(`
       INSERT INTO users (email, password, role, ign, uid, phone, discord, verified, otp_code)
-      VALUES (?, ?, 'user', ?, ?, ?, ?, 0, ?)
-    `).run(email, password, ign, uid, phone || '', discord || '', otp);
+      VALUES (?, ?, 'user', ?, ?, ?, ?, 1, '')
+    `).run(email, password, ign, uid, phone || '', discord || '');
 
-    sendOtpEmail(email, otp, 'signup');
+    const userId = info.lastInsertRowid;
+
+    // Create session immediately
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expiresAt);
+
+    res.setHeader('Set-Cookie', [
+      `ghostline-session=${token}; Path=/; Max-Age=604800; SameSite=Lax; HttpOnly`,
+      `ghostline-admin=false; Path=/; Max-Age=604800; SameSite=Lax`
+    ]);
 
     res.json({
       success: true,
-      verified: false,
-      userId: info.lastInsertRowid
+      verified: true,
+      user: {
+        id: userId,
+        email: email,
+        role: 'user',
+        ign: ign,
+        uid: uid,
+        phone: phone || '',
+        discord: discord || '',
+        avatar: ''
+      }
     });
   } catch (err) {
     console.error(err);
@@ -288,20 +305,6 @@ app.post('/api/auth/login', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
   if (!user) {
     return res.status(401).json({ error: 'Invalid email or password' });
-  }
-
-  if (user.verified === 0) {
-    let otp = user.otp_code;
-    if (!otp) {
-      otp = Math.floor(100000 + Math.random() * 900000).toString();
-      db.prepare('UPDATE users SET otp_code = ? WHERE id = ?').run(otp, user.id);
-    }
-    sendOtpEmail(user.email, otp, 'signup');
-    return res.status(403).json({
-      error: 'Email verification required',
-      verified: false,
-      userId: user.id
-    });
   }
 
   // Create session
@@ -539,13 +542,13 @@ app.post('/api/register', (req, res) => {
 
   const userId = getUserIdFromSession(req);
   const regId = `GL-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
-  const otp = `${Math.floor(100000 + Math.random() * 900000)}`;
   const playersJson = JSON.stringify(reqPlayers);
 
+  // Insert registration (verified immediately)
   db.prepare(`
-    INSERT INTO registrations (reg_id, tournament_id, tournament_title, mode, team_name, full_name, email, phone, discord, players_json, otp, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(regId, tournament.id, tournament.title, tournament.mode, teamName || fullName, fullName, email, phone, discord || '', playersJson, otp, userId);
+    INSERT INTO registrations (reg_id, tournament_id, tournament_title, mode, team_name, full_name, email, phone, discord, players_json, otp, verified, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?)
+  `).run(regId, tournament.id, tournament.title, tournament.mode, teamName || fullName, fullName, email, phone, discord || '', playersJson, userId);
 
   const updatedFilled = tournament.slots_filled + 1;
   let nextStatus = tournament.status;
@@ -553,16 +556,10 @@ app.post('/api/register', (req, res) => {
   else if (updatedFilled / tournament.slots_total >= 0.85 && tournament.status === 'Open') nextStatus = 'Filling Fast';
   db.prepare('UPDATE tournaments SET slots_filled = ?, status = ? WHERE id = ?').run(updatedFilled, nextStatus, tournament.id);
 
-  sendOtpEmail(email, otp, 'registration');
-  res.json({ success: true, regId, message: 'Registration saved. OTP sent to email/phone.' });
+  res.json({ success: true, regId, message: 'Registration successful! Your slot is verified.' });
 });
 
 app.post('/api/verify-otp', (req, res) => {
-  const { regId, otp } = req.body;
-  const row = db.prepare('SELECT * FROM registrations WHERE reg_id = ?').get(regId);
-  if (!row) return res.status(404).json({ error: 'Registration not found' });
-  if (row.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
-  db.prepare('UPDATE registrations SET verified = 1, otp = NULL WHERE reg_id = ?').run(regId);
   res.json({ success: true, message: 'Registration verified successfully' });
 });
 

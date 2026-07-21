@@ -84,9 +84,8 @@ function RegistrationModal({ tournamentId, tournaments, loggedIn, user, onClose,
       
       if (!res.ok) throw new Error(json.error || 'Registration failed')
 
-      triggerOtp(json.regId, json.otp, t.title)
+      showToast('Registration successful! ✓')
       onClose()
-      showToast('OTP generated successfully!')
       await refreshData()
     } catch (err) {
       showToast(`⚠ ${err.message || 'Registration failed'}`, 'error')
