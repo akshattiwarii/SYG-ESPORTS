@@ -33,7 +33,7 @@ function Rules() {
 
         <div style={{ marginTop: '30px', display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
           {/* Battle Royale Card */}
-          <div className="panel-2" style={{ padding: '24px', borderRadius: '16px', flex: '1 1 500px' }}>
+          <div className="panel-2" style={{ padding: '24px', borderRadius: '16px', flex: '1 1 300px' }}>
             <h3 style={{ fontSize: '18px', color: 'var(--orange-2)', marginBottom: '14px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
               Battle Royale Points System (Squad, Duo, Solo)
             </h3>
@@ -96,7 +96,7 @@ function Rules() {
           </div>
 
           {/* Clash Squad & Lone Wolf Card */}
-          <div className="panel-2" style={{ padding: '24px', borderRadius: '16px', flex: '1 1 400px', display: 'flex', flexDirection: 'column' }}>
+          <div className="panel-2" style={{ padding: '24px', borderRadius: '16px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ fontSize: '18px', color: 'var(--orange-2)', marginBottom: '14px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
               Clash Squad & Lone Wolf Match Rules
             </h3>
