@@ -781,15 +781,17 @@ app.get('/api/leaderboard', async (req, res) => {
   const { period, mode } = req.query;
   let sql = `
     SELECT 
-      player_uid as uid,
-      MAX(player_ign) as name,
-      COUNT(DISTINCT tournament_id) as matches,
+      match_results.player_uid as uid,
+      MAX(match_results.player_ign) as name,
+      MAX(users.avatar) as avatar,
+      COUNT(DISTINCT match_results.tournament_id) as matches,
       SUM(CASE WHEN placement = 1 THEN 1 ELSE 0 END) as wins,
       SUM(CASE WHEN placement <= 3 THEN 1 ELSE 0 END) as top3,
       SUM(kills) as kills,
       SUM(points) as points,
       SUM(prize_won) as prize
     FROM match_results
+    LEFT JOIN users ON (users.uid = match_results.player_uid OR LOWER(users.ign) = LOWER(match_results.player_ign))
     JOIN tournaments ON tournaments.id = match_results.tournament_id
     WHERE 1=1
   `;
@@ -807,7 +809,7 @@ app.get('/api/leaderboard', async (req, res) => {
     sql += ` AND match_results.created_at >= NOW() - INTERVAL '30 days'`;
   }
 
-  sql += ` GROUP BY player_uid ORDER BY points DESC, kills DESC, wins DESC`;
+  sql += ` GROUP BY match_results.player_uid ORDER BY points DESC, kills DESC, wins DESC`;
 
   try {
     const rows = await db.prepare(sql).all(params);
@@ -815,6 +817,7 @@ app.get('/api/leaderboard', async (req, res) => {
       rank: index + 1,
       name: row.name,
       uid: row.uid,
+      avatar: row.avatar || '',
       mode: mode === 'all' || !mode ? 'Mixed' : mode,
       matches: Number(row.matches),
       wins: Number(row.wins),

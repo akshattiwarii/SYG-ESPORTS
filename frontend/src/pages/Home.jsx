@@ -48,7 +48,13 @@ function Home({ tournaments, leaderboard, winners, stats, openRegistration, setA
                 <div className="hp-row" key={i}>
                   <div className="hp-row-left">
                     <span className={`hp-rank r${p.rank}`}>#{p.rank}</span>
-                    <div className="mini-avatar">{initials(p.name)}</div>
+                    <div className="mini-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {p.avatar ? (
+                        <img src={p.avatar} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        initials(p.name)
+                      )}
+                    </div>
                     <div>
                       <div className="hp-name">{p.name}</div>
                       <div className="hp-sub">{p.wins} wins · {p.matches} matches</div>
@@ -217,7 +223,13 @@ function Home({ tournaments, leaderboard, winners, stats, openRegistration, setA
                         <span className="mono" style={{ color: 'var(--orange-2)', fontWeight: 700 }}>{p.points} pts</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-                        <div className="podium-avatar" style={{ margin: 0 }}>{initials(p.name)}</div>
+                        <div className="podium-avatar" style={{ margin: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {p.avatar ? (
+                            <img src={p.avatar} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            initials(p.name)
+                          )}
+                        </div>
                         <div>
                           <div style={{ fontWeight: 700 }}>{p.name}</div>
                           <div style={{ color: 'var(--text-faint)', fontSize: '12px' }}>{p.mode}</div>
@@ -252,7 +264,13 @@ function Home({ tournaments, leaderboard, winners, stats, openRegistration, setA
                   {winners.length > 0 ? (
                     winners.map((w, idx) => (
                       <div className="winner-card panel" key={idx}>
-                        <div className="winner-avatar">{initials(w.name)}</div>
+                        <div className="winner-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {w.avatar ? (
+                            <img src={w.avatar} alt={w.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            initials(w.name)
+                          )}
+                        </div>
                         <div>
                           <div className="winner-name">{w.name}</div>
                           <div className="winner-meta">{w.tournament} · {w.mode} · {w.date}</div>

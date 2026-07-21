@@ -101,7 +101,13 @@ function Leaderboard({ leaderboard, setLeaderboard }) {
               {top3.map((p) => (
                 <div className={`podium-card p${p.rank}`} key={p.uid}>
                   <div className="podium-rank">{p.rank}</div>
-                  <div className="podium-avatar">{initials(p.name)}</div>
+                  <div className="podium-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {p.avatar ? (
+                      <img src={p.avatar} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      initials(p.name)
+                    )}
+                  </div>
                   <div className="podium-name">{p.name}</div>
                   <div className="podium-meta">{p.mode} · {p.wins} wins</div>
                   <div className="podium-pts">{p.points.toLocaleString('en-IN')}</div>
@@ -138,7 +144,13 @@ function Leaderboard({ leaderboard, setLeaderboard }) {
                           <td className="rankcell">#{p.rank}</td>
                           <td>
                             <div className="namecell">
-                              <div className="mini-avatar">{initials(p.name)}</div>
+                              <div className="mini-avatar" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                {p.avatar ? (
+                                  <img src={p.avatar} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  initials(p.name)
+                                )}
+                              </div>
                               {p.name}
                               <span style={{ color: 'var(--text-faint)', fontWeight: 400, fontSize: '11.5px', marginLeft: '4px' }}>
                                 {p.mode}

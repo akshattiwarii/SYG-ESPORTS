@@ -98,6 +98,7 @@ function App() {
           const actualWinners = lData.filter(p => Number(p.wins) > 0 || Number(p.prize) > 0)
           const champs = actualWinners.slice(0, 4).map((p) => ({
             name: p.name || p.ign || 'Esports Gamer',
+            avatar: p.avatar || '',
             tournament: p.last_tournament || 'SYG Championship',
             mode: p.mode || 'BR Squad',
             date: 'Recent',
