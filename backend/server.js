@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const crypto = require('crypto');
 
 dotenv.config();
@@ -105,8 +105,55 @@ function logConsoleEmail(toEmail, otpCode, subject) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'ghostline.db');
-const db = new Database(dbPath);
+
+// Initialize PostgreSQL Connection Pool
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error("FATAL ERROR: DATABASE_URL is not set in environment variables!");
+}
+
+const pool = new Pool({
+  connectionString: connectionString,
+  ssl: connectionString && (connectionString.includes('localhost') || connectionString.includes('127.0.0.1')) ? false : {
+    rejectUnauthorized: false
+  }
+});
+
+// Convert SQLite "?" placeholders to PostgreSQL "$1", "$2" etc.
+function convertSql(sql) {
+  let index = 1;
+  return sql.replace(/\?/g, () => `$${index++}`);
+}
+
+// better-sqlite3 compatibility layer mapping to PostgreSQL
+const db = {
+  prepare(sql) {
+    const pgSql = convertSql(sql);
+    return {
+      async get(...params) {
+        const flattened = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+        const res = await pool.query(pgSql, flattened);
+        return res.rows[0] || null;
+      },
+      async all(...params) {
+        const flattened = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+        const res = await pool.query(pgSql, flattened);
+        return res.rows;
+      },
+      async run(...params) {
+        const flattened = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+        const res = await pool.query(pgSql, flattened);
+        return {
+          lastInsertRowid: res.rows[0] ? (res.rows[0].id || res.rows[0].lastinsertrowid) : null,
+          rowCount: res.rowCount
+        };
+      }
+    };
+  },
+  async exec(sql) {
+    return await pool.query(sql);
+  }
+};
 
 app.use(cors());
 app.use(express.json());
@@ -117,26 +164,33 @@ function getCookie(req, name) {
   return cookie ? decodeURIComponent(cookie.slice(name.length + 1)) : null;
 }
 
-function getUserIdFromSession(req) {
+async function getUserIdFromSession(req) {
   const token = getCookie(req, 'ghostline-session');
   if (!token) return null;
-  const session = db.prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?').get(token);
-  if (!session) return null;
-  if (new Date(session.expires_at) < new Date()) {
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  
+  try {
+    const session = await db.prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?').get(token);
+    if (!session) return null;
+    if (new Date(session.expires_at) < new Date()) {
+      await db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+      return null;
+    }
+    return session.user_id;
+  } catch (err) {
+    console.error('Session lookup failed', err);
     return null;
   }
-  return session.user_id;
 }
 
-function getLoggedInUser(req) {
-  const userId = getUserIdFromSession(req);
+async function getLoggedInUser(req) {
+  const userId = await getUserIdFromSession(req);
   if (!userId) return null;
-  return db.prepare('SELECT id, email, role, ign, uid, phone, discord, avatar FROM users WHERE id = ?').get(userId);
+  return await db.prepare('SELECT id, email, role, ign, uid, phone, discord, avatar FROM users WHERE id = ?').get(userId);
 }
 
-function isAdminAuthed(req) {
-  const user = getLoggedInUser(req);
+async function isAdminAuthed(req) {
+  const user = await getLoggedInUser(req);
+  return user && user.role === 'admin';
 }
 
 const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'dist');
@@ -145,8 +199,8 @@ app.use(express.static(frontendBuildPath));
 const adminUsername = process.env.ADMIN_USERNAME || 'ghostline';
 const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-function initDb() {
-  db.exec(`
+async function initDb() {
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS tournaments (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -158,11 +212,29 @@ function initDb() {
       slots_total INTEGER NOT NULL DEFAULT 0,
       slots_filled INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'Open',
-      deadline TEXT NOT NULL DEFAULT ''
+      deadline TEXT NOT NULL DEFAULT '',
+      room_id TEXT DEFAULT '',
+      room_pass TEXT DEFAULT '',
+      room_notes TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      ign TEXT DEFAULT '',
+      uid TEXT,
+      phone TEXT DEFAULT '',
+      discord TEXT DEFAULT '',
+      avatar TEXT DEFAULT '',
+      verified INTEGER DEFAULT 1,
+      otp_code TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS registrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       reg_id TEXT UNIQUE NOT NULL,
       tournament_id TEXT NOT NULL,
       tournament_title TEXT NOT NULL,
@@ -175,27 +247,18 @@ function initDb() {
       players_json TEXT NOT NULL,
       otp TEXT,
       verified INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'user',
-      verified INTEGER DEFAULT 1,
-      otp_code TEXT DEFAULT ''
+      user_id INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      expires_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS match_results (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tournament_id TEXT NOT NULL,
       player_uid TEXT NOT NULL,
       player_ign TEXT NOT NULL,
@@ -204,48 +267,51 @@ function initDb() {
       kills INTEGER NOT NULL DEFAULT 0,
       points INTEGER NOT NULL DEFAULT 0,
       prize_won INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS contacts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL,
       subject TEXT NOT NULL,
       message TEXT NOT NULL,
       resolved INTEGER DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  // Migrations for existing DB:
-  try { db.exec("ALTER TABLE users ADD COLUMN ign TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN uid TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN discord TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 1"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN otp_code TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE registrations ADD COLUMN user_id INTEGER"); } catch (e) {}
-  try { db.exec("ALTER TABLE tournaments ADD COLUMN room_id TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE tournaments ADD COLUMN room_pass TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE tournaments ADD COLUMN room_notes TEXT DEFAULT ''"); } catch (e) {}
+  // Migrations for existing DB tables:
+  const alterStatements = [
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS ign TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS uid TEXT",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS discord TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS verified INTEGER DEFAULT 1",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code TEXT DEFAULT ''",
+    "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS user_id INTEGER",
+    "ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_id TEXT DEFAULT ''",
+    "ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_pass TEXT DEFAULT ''",
+    "ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_notes TEXT DEFAULT ''"
+  ];
+  for (const statement of alterStatements) {
+    try { await db.exec(statement); } catch (e) {}
+  }
 
-  const existingAdmin = db.prepare('SELECT id FROM users WHERE role = ?').get('admin');
+  const existingAdmin = await db.prepare('SELECT id FROM users WHERE role = ?').get('admin');
   if (!existingAdmin) {
-    db.prepare('INSERT INTO users (email, password, role) VALUES (?, ?, ?)').run(adminUsername, adminPassword, 'admin');
+    await db.prepare('INSERT INTO users (email, password, role) VALUES (?, ?, ?)').run(adminUsername, adminPassword, 'admin');
   }
 }
-
-initDb();
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // ================= AUTHENTICATION APIs =================
 
 // Auth API - Sign Up
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const { email, password, ign, uid, phone, discord } = req.body;
   if (!email || !password || !ign || !uid) {
     return res.status(400).json({ error: 'Email, Password, IGN, and UID are required' });
@@ -253,17 +319,18 @@ app.post('/api/auth/signup', (req, res) => {
 
   try {
     // Check if email already exists
-    const emailExists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const emailExists = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (emailExists) return res.status(400).json({ error: 'Email is already registered' });
 
     // Check if FF UID already exists
-    const uidExists = db.prepare('SELECT id FROM users WHERE uid = ?').get(uid);
+    const uidExists = await db.prepare('SELECT id FROM users WHERE uid = ?').get(uid);
     if (uidExists) return res.status(400).json({ error: 'Free Fire UID is already registered' });
 
     // Insert user (verified immediately)
-    const info = db.prepare(`
+    const info = await db.prepare(`
       INSERT INTO users (email, password, role, ign, uid, phone, discord, verified, otp_code)
       VALUES (?, ?, 'user', ?, ?, ?, ?, 1, '')
+      RETURNING id
     `).run(email, password, ign, uid, phone || '', discord || '');
 
     const userId = info.lastInsertRowid;
@@ -271,7 +338,7 @@ app.post('/api/auth/signup', (req, res) => {
     // Create session immediately
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expiresAt);
+    await db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expiresAt);
 
     res.setHeader('Set-Cookie', [
       `ghostline-session=${token}; Path=/; Max-Age=604800; SameSite=Lax; HttpOnly`,
@@ -299,13 +366,13 @@ app.post('/api/auth/signup', (req, res) => {
 });
 
 // Auth API - Login
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
+  const user = await db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
   if (!user) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
@@ -313,7 +380,7 @@ app.post('/api/auth/login', (req, res) => {
   // Create session
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
+  await db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
 
   const isAdmin = user.role === 'admin';
   res.setHeader('Set-Cookie', [
@@ -337,10 +404,10 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // Auth API - Logout
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
   const token = getCookie(req, 'ghostline-session');
   if (token) {
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    await db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   }
 
   res.setHeader('Set-Cookie', [
@@ -352,19 +419,20 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Auth API - Me (fetch profile and stats)
-app.get('/api/auth/me', (req, res) => {
-  const user = getLoggedInUser(req);
+app.get('/api/auth/me', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
   // Aggregate user statistics
-  const regCount = db.prepare('SELECT COUNT(*) as c FROM registrations WHERE user_id = ?').get(user.id).c;
+  const regCountRow = await db.prepare('SELECT COUNT(*) as c FROM registrations WHERE user_id = ?').get(user.id);
+  const regCount = regCountRow ? Number(regCountRow.c) : 0;
 
   let matchStats = { matches: 0, wins: 0, top3: 0, kills: 0, points: 0, prize: 0, rank: '—' };
   
   if (user.uid) {
-    const statsRow = db.prepare(`
+    const statsRow = await db.prepare(`
       SELECT 
         COUNT(*) as matches,
         SUM(CASE WHEN placement = 1 THEN 1 ELSE 0 END) as wins,
@@ -376,19 +444,19 @@ app.get('/api/auth/me', (req, res) => {
       WHERE player_uid = ?
     `).get(user.uid);
 
-    if (statsRow && statsRow.matches > 0) {
+    if (statsRow && Number(statsRow.matches) > 0) {
       matchStats = {
-        matches: statsRow.matches,
-        wins: statsRow.wins || 0,
-        top3: statsRow.top3 || 0,
-        kills: statsRow.kills || 0,
-        points: statsRow.points || 0,
-        prize: statsRow.prize || 0,
+        matches: Number(statsRow.matches),
+        wins: Number(statsRow.wins || 0),
+        top3: Number(statsRow.top3 || 0),
+        kills: Number(statsRow.kills || 0),
+        points: Number(statsRow.points || 0),
+        prize: Number(statsRow.prize || 0),
         rank: '—'
       };
 
       // Calculate their current rank dynamically
-      const rankQuery = db.prepare(`
+      const rankQuery = await db.prepare(`
         SELECT player_uid, SUM(points) as total_points
         FROM match_results
         GROUP BY player_uid
@@ -405,7 +473,7 @@ app.get('/api/auth/me', (req, res) => {
   let prevMatches = [];
   if (user.uid) {
     try {
-      prevMatches = db.prepare(`
+      prevMatches = await db.prepare(`
         SELECT 
           tournaments.title as tournament_title,
           tournaments.mode,
@@ -434,8 +502,8 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // Auth API - Update Profile
-app.post('/api/auth/profile', (req, res) => {
-  const user = getLoggedInUser(req);
+app.post('/api/auth/profile', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -446,13 +514,13 @@ app.post('/api/auth/profile', (req, res) => {
   }
 
   try {
-    db.prepare(`
+    await db.prepare(`
       UPDATE users 
       SET ign = ?, phone = ?, discord = ?, avatar = ?
       WHERE id = ?
     `).run(ign, phone || '', discord || '', avatar || '', user.id);
 
-    const updatedUser = db.prepare('SELECT id, email, role, ign, uid, phone, discord, avatar FROM users WHERE id = ?').get(user.id);
+    const updatedUser = await db.prepare('SELECT id, email, role, ign, uid, phone, discord, avatar FROM users WHERE id = ?').get(user.id);
     res.json({
       success: true,
       user: updatedUser
@@ -463,14 +531,14 @@ app.post('/api/auth/profile', (req, res) => {
   }
 });
 
-// Auth API - Verify Signup
-app.post('/api/auth/verify-signup', (req, res) => {
+// Auth API - Verify Signup (Keep for legacy route compatibility)
+app.post('/api/auth/verify-signup', async (req, res) => {
   const { userId, otp } = req.body;
   if (!userId || !otp) {
     return res.status(400).json({ error: 'User ID and OTP are required' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
@@ -480,12 +548,12 @@ app.post('/api/auth/verify-signup', (req, res) => {
   }
 
   try {
-    db.prepare('UPDATE users SET verified = 1, otp_code = \'\' WHERE id = ?').run(userId);
+    await db.prepare("UPDATE users SET verified = 1, otp_code = '' WHERE id = ?").run(userId);
     
     // Create session
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
+    await db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
 
     res.setHeader('Set-Cookie', [
       `ghostline-session=${token}; Path=/; Max-Age=604800; SameSite=Lax; HttpOnly`,
@@ -513,8 +581,8 @@ app.post('/api/auth/verify-signup', (req, res) => {
 });
 
 
-app.get('/api/tournaments', (req, res) => {
-  const rows = db.prepare(`
+app.get('/api/tournaments', async (req, res) => {
+  const rows = await db.prepare(`
     SELECT id, title, mode, date, time, prize, fee, slots_total, slots_filled, status, deadline
     FROM tournaments
     ORDER BY date ASC
@@ -522,9 +590,9 @@ app.get('/api/tournaments', (req, res) => {
   res.json(rows);
 });
 
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { tournamentId, fullName, email, phone, discord, teamName, players } = req.body;
-  const tournament = db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
+  const tournament = await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
   if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
   if (tournament.slots_filled >= tournament.slots_total) return res.status(400).json({ error: 'Tournament is full' });
 
@@ -547,12 +615,12 @@ app.post('/api/register', (req, res) => {
     }
   }
 
-  const userId = getUserIdFromSession(req);
+  const userId = await getUserIdFromSession(req);
   const regId = `GL-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
   const playersJson = JSON.stringify(reqPlayers);
 
   // Insert registration (verified immediately)
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO registrations (reg_id, tournament_id, tournament_title, mode, team_name, full_name, email, phone, discord, players_json, otp, verified, user_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?)
   `).run(regId, tournament.id, tournament.title, tournament.mode, teamName || fullName, fullName, email, phone, discord || '', playersJson, userId);
@@ -561,7 +629,7 @@ app.post('/api/register', (req, res) => {
   let nextStatus = tournament.status;
   if (updatedFilled >= tournament.slots_total) nextStatus = 'Full';
   else if (updatedFilled / tournament.slots_total >= 0.85 && tournament.status === 'Open') nextStatus = 'Filling Fast';
-  db.prepare('UPDATE tournaments SET slots_filled = ?, status = ? WHERE id = ?').run(updatedFilled, nextStatus, tournament.id);
+  await db.prepare('UPDATE tournaments SET slots_filled = ?, status = ? WHERE id = ?').run(updatedFilled, nextStatus, tournament.id);
 
   res.json({ success: true, regId, message: 'Registration successful! Your slot is verified.' });
 });
@@ -570,25 +638,25 @@ app.post('/api/verify-otp', (req, res) => {
   res.json({ success: true, message: 'Registration verified successfully' });
 });
 
-app.get('/api/registrations', (req, res) => {
-  const user = getLoggedInUser(req);
+app.get('/api/registrations', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user) {
     return res.json([]);
   }
 
   if (user.role === 'admin') {
-    const rows = db.prepare('SELECT * FROM registrations ORDER BY id DESC').all();
+    const rows = await db.prepare('SELECT * FROM registrations ORDER BY id DESC').all();
     res.json(rows);
   } else {
-    const rows = db.prepare('SELECT * FROM registrations WHERE user_id = ? OR email = ? ORDER BY id DESC').all(user.id, user.email);
+    const rows = await db.prepare('SELECT * FROM registrations WHERE user_id = ? OR email = ? ORDER BY id DESC').all(user.id, user.email);
     res.json(rows);
   }
 });
 
 // ================= ADMIN TOURNAMENT CRUD =================
 
-app.post('/api/admin/tournaments', (req, res) => {
-  if (!isAdminAuthed(req)) return res.status(401).json({ error: 'Admin access required' });
+app.post('/api/admin/tournaments', async (req, res) => {
+  if (!(await isAdminAuthed(req))) return res.status(401).json({ error: 'Admin access required' });
 
   const { title, mode, status, date, time, prize, fee, slotsTotal } = req.body;
   if (!title || !mode) return res.status(400).json({ error: 'Title and mode are required' });
@@ -597,7 +665,7 @@ app.post('/api/admin/tournaments', (req, res) => {
   const deadline = date ? `${date}, 2 hours before start` : 'TBA';
 
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO tournaments (id, title, mode, date, time, prize, fee, slots_total, slots_filled, status, deadline)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     `).run(id, title, mode, date || 'TBA', time || 'TBA', Number(prize) || 0, Number(fee) || 0, Number(slotsTotal) || 32, status || 'Open', deadline);
@@ -609,11 +677,11 @@ app.post('/api/admin/tournaments', (req, res) => {
   }
 });
 
-app.delete('/api/admin/tournaments/:id', (req, res) => {
-  if (!isAdminAuthed(req)) return res.status(401).json({ error: 'Admin access required' });
+app.delete('/api/admin/tournaments/:id', async (req, res) => {
+  if (!(await isAdminAuthed(req))) return res.status(401).json({ error: 'Admin access required' });
 
   try {
-    db.prepare('DELETE FROM tournaments WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM tournaments WHERE id = ?').run(req.params.id);
     res.json({ success: true, message: 'Tournament deleted successfully' });
   } catch (err) {
     console.error(err);
@@ -621,14 +689,14 @@ app.delete('/api/admin/tournaments/:id', (req, res) => {
   }
 });
 
-app.patch('/api/admin/tournaments/:id/status', (req, res) => {
-  if (!isAdminAuthed(req)) return res.status(401).json({ error: 'Admin access required' });
+app.patch('/api/admin/tournaments/:id/status', async (req, res) => {
+  if (!(await isAdminAuthed(req))) return res.status(401).json({ error: 'Admin access required' });
 
   const { status } = req.body;
   if (!status) return res.status(400).json({ error: 'Status is required' });
 
   try {
-    db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run(status, req.params.id);
+    await db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run(status, req.params.id);
     res.json({ success: true, message: 'Status updated successfully' });
   } catch (err) {
     console.error(err);
@@ -645,33 +713,33 @@ function calculatePlacementPoints(place) {
 }
 
 // Admin Match Results Submission
-app.post('/api/admin/match-results', (req, res) => {
-  if (!isAdminAuthed(req)) return res.status(401).json({ error: 'Admin access required' });
+app.post('/api/admin/match-results', async (req, res) => {
+  if (!(await isAdminAuthed(req))) return res.status(401).json({ error: 'Admin access required' });
 
   const { tournamentId, results } = req.body;
   if (!tournamentId || !Array.isArray(results)) {
     return res.status(400).json({ error: 'Tournament ID and results array are required' });
   }
 
-  const tournament = db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
-  if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+  try {
+    const tournament = await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
 
-  const deleteExisting = db.prepare('DELETE FROM match_results WHERE tournament_id = ?');
-  const insertResult = db.prepare(`
-    INSERT INTO match_results (tournament_id, player_uid, player_ign, team_name, placement, kills, points, prize_won)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const updateTournamentStatus = db.prepare("UPDATE tournaments SET status = 'Completed' WHERE id = ?");
+    // Begin PostgreSQL Transaction
+    await db.exec('BEGIN');
 
-  const runTransaction = db.transaction((data) => {
-    deleteExisting.run(tournamentId);
-    data.forEach(row => {
+    await db.prepare('DELETE FROM match_results WHERE tournament_id = ?').run(tournamentId);
+    
+    for (const row of results) {
       const placement = Number(row.placement) || 0;
       const kills = Number(row.kills) || 0;
       const prizeWon = Number(row.prizeWon) || 0;
       const points = Number(row.points) || (calculatePlacementPoints(placement) + kills);
 
-      insertResult.run(
+      await db.prepare(`
+        INSERT INTO match_results (tournament_id, player_uid, player_ign, team_name, placement, kills, points, prize_won)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
         tournamentId,
         row.playerUid,
         row.playerIgn,
@@ -681,21 +749,23 @@ app.post('/api/admin/match-results', (req, res) => {
         points,
         prizeWon
       );
-    });
-    updateTournamentStatus.run(tournamentId);
-  });
+    }
+    
+    await db.prepare("UPDATE tournaments SET status = 'Completed' WHERE id = ?").run(tournamentId);
 
-  try {
-    runTransaction(results);
+    // Commit PostgreSQL Transaction
+    await db.exec('COMMIT');
+
     res.json({ success: true, message: 'Match results submitted and leaderboard updated' });
   } catch (err) {
+    try { await db.exec('ROLLBACK'); } catch (e) {}
     console.error(err);
     res.status(500).json({ error: 'Failed to save match results' });
   }
 });
 
 // Fetch Leaderboard (Weekly, Monthly, Season/All-Time)
-app.get('/api/leaderboard', (req, res) => {
+app.get('/api/leaderboard', async (req, res) => {
   const { period, mode } = req.query;
   let sql = `
     SELECT 
@@ -718,28 +788,28 @@ app.get('/api/leaderboard', (req, res) => {
     params.push(mode);
   }
 
-  // SQLite datetime calculation
+  // PostgreSQL datetime calculations
   if (period === 'weekly') {
-    sql += ` AND match_results.created_at >= datetime('now', '-7 days')`;
+    sql += ` AND match_results.created_at >= NOW() - INTERVAL '7 days'`;
   } else if (period === 'monthly') {
-    sql += ` AND match_results.created_at >= datetime('now', '-30 days')`;
+    sql += ` AND match_results.created_at >= NOW() - INTERVAL '30 days'`;
   }
 
   sql += ` GROUP BY player_uid ORDER BY points DESC, kills DESC, wins DESC`;
 
   try {
-    const rows = db.prepare(sql).all(params);
+    const rows = await db.prepare(sql).all(params);
     const rankedRows = rows.map((row, index) => ({
       rank: index + 1,
       name: row.name,
       uid: row.uid,
       mode: mode === 'all' || !mode ? 'Mixed' : mode,
-      matches: row.matches,
-      wins: row.wins,
-      top3: row.top3,
-      kills: row.kills,
-      points: row.points,
-      prize: row.prize
+      matches: Number(row.matches),
+      wins: Number(row.wins),
+      top3: Number(row.top3),
+      kills: Number(row.kills),
+      points: Number(row.points),
+      prize: Number(row.prize)
     }));
     res.json(rankedRows);
   } catch (err) {
@@ -748,22 +818,22 @@ app.get('/api/leaderboard', (req, res) => {
   }
 });
 
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(username, password);
+  const user = await db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(username, password);
   if (!user || user.role !== 'admin') return res.status(401).json({ error: 'Unauthorized' });
   res.json({ success: true, role: 'admin' });
 });
 
 // Contact Form API - Public Submit
-app.post('/api/contact', (req, res) => {
+app.post('/api/contact', async (req, res) => {
   const { name, email, subject, message } = req.body;
   if (!name || !email || !subject || !message) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO contacts (name, email, subject, message)
       VALUES (?, ?, ?, ?)
     `).run(name, email, subject, message);
@@ -800,14 +870,14 @@ app.post('/api/contact', (req, res) => {
 });
 
 // Contact Form API - Admin List
-app.get('/api/contacts', (req, res) => {
-  const user = getLoggedInUser(req);
+app.get('/api/contacts', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
   try {
-    const rows = db.prepare('SELECT * FROM contacts ORDER BY id DESC').all();
+    const rows = await db.prepare('SELECT * FROM contacts ORDER BY id DESC').all();
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -816,15 +886,15 @@ app.get('/api/contacts', (req, res) => {
 });
 
 // Contact Form API - Admin Resolve
-app.post('/api/contacts/:id/resolve', (req, res) => {
-  const user = getLoggedInUser(req);
+app.post('/api/contacts/:id/resolve', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
   const { id } = req.params;
   try {
-    db.prepare('UPDATE contacts SET resolved = 1 WHERE id = ?').run(id);
+    await db.prepare('UPDATE contacts SET resolved = 1 WHERE id = ?').run(id);
     res.json({ success: true, message: 'Message marked as resolved' });
   } catch (err) {
     console.error(err);
@@ -833,15 +903,15 @@ app.post('/api/contacts/:id/resolve', (req, res) => {
 });
 
 // Contact Form API - Admin Delete
-app.delete('/api/contacts/:id', (req, res) => {
-  const user = getLoggedInUser(req);
+app.delete('/api/contacts/:id', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
   const { id } = req.params;
   try {
-    db.prepare('DELETE FROM contacts WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM contacts WHERE id = ?').run(id);
     res.json({ success: true, message: 'Message deleted successfully' });
   } catch (err) {
     console.error(err);
@@ -850,8 +920,8 @@ app.delete('/api/contacts/:id', (req, res) => {
 });
 
 // Tournament Lobbies - Set Room Credentials (Admin only)
-app.post('/api/admin/tournaments/:id/room', (req, res) => {
-  const user = getLoggedInUser(req);
+app.post('/api/admin/tournaments/:id/room', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -859,7 +929,7 @@ app.post('/api/admin/tournaments/:id/room', (req, res) => {
   const { id } = req.params;
   const { roomId, roomPass, roomNotes } = req.body;
   try {
-    db.prepare(`
+    await db.prepare(`
       UPDATE tournaments
       SET room_id = ?, room_pass = ?, room_notes = ?
       WHERE id = ?
@@ -872,8 +942,8 @@ app.post('/api/admin/tournaments/:id/room', (req, res) => {
 });
 
 // Tournament Lobbies - Get Room Credentials (Registered Users only)
-app.get('/api/tournaments/:id/room', (req, res) => {
-  const user = getLoggedInUser(req);
+app.get('/api/tournaments/:id/room', async (req, res) => {
+  const user = await getLoggedInUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -881,7 +951,7 @@ app.get('/api/tournaments/:id/room', (req, res) => {
   const { id } = req.params;
   try {
     // Check if the user is registered and verified for this tournament
-    const registration = db.prepare(`
+    const registration = await db.prepare(`
       SELECT id FROM registrations
       WHERE tournament_id = ? AND user_id = ? AND verified = 1
     `).get(id, user.id);
@@ -891,7 +961,7 @@ app.get('/api/tournaments/:id/room', (req, res) => {
       return res.status(403).json({ error: 'Access denied: You must be a registered participant to view lobby credentials.' });
     }
 
-    const tournament = db.prepare('SELECT room_id, room_pass, room_notes FROM tournaments WHERE id = ?').get(id);
+    const tournament = await db.prepare('SELECT room_id, room_pass, room_notes FROM tournaments WHERE id = ?').get(id);
     if (!tournament) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
@@ -919,6 +989,14 @@ app.get('*', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Bootstrap Database first, then spin up Web Server
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error('Database bootstrap failed', err);
+    process.exit(1);
+  });
