@@ -249,20 +249,26 @@ function Home({ tournaments, leaderboard, winners, stats, openRegistration, setA
                 <span className="eyebrow">Wall of Fame</span>
                 <h2 className="section-title" style={{ marginBottom: '20px' }}>Recent Champions</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }} id="recentWinners">
-                  {winners.map((w, idx) => (
-                    <div className="winner-card panel" key={idx}>
-                      <div className="winner-avatar">{initials(w.name)}</div>
-                      <div>
-                        <div className="winner-name">{w.name}</div>
-                        <div className="winner-meta">{w.tournament} · {w.mode} · {w.date}</div>
+                  {winners.length > 0 ? (
+                    winners.map((w, idx) => (
+                      <div className="winner-card panel" key={idx}>
+                        <div className="winner-avatar">{initials(w.name)}</div>
+                        <div>
+                          <div className="winner-name">{w.name}</div>
+                          <div className="winner-meta">{w.tournament} · {w.mode} · {w.date}</div>
+                        </div>
+                        <div className="winner-prize" style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                          <span className="badge badge-filling" style={{ marginBottom: '4px' }}>🏆 Champion</span>
+                          <br />
+                          <b>{money(w.prize)}</b>
+                        </div>
                       </div>
-                      <div className="winner-prize" style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                        <span className="badge badge-filling" style={{ marginBottom: '4px' }}>🏆 Champion</span>
-                        <br />
-                        <b>{money(w.prize)}</b>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '13.5px' }}>
+                      🏆 No Champions Crowned Yet in Season 4
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>

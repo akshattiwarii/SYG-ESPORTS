@@ -93,13 +93,15 @@ function App() {
       if (lRes.ok) {
         const lData = await lRes.json()
         setLeaderboard(lData)
-        if (Array.isArray(lData) && lData.length > 0) {
-          const champs = lData.slice(0, 4).map((p, idx) => ({
+        if (Array.isArray(lData)) {
+          // Strictly filter ONLY players who have actually won at least 1 match or prize money
+          const actualWinners = lData.filter(p => Number(p.wins) > 0 || Number(p.prize) > 0)
+          const champs = actualWinners.slice(0, 4).map((p) => ({
             name: p.name || p.ign || 'Esports Gamer',
-            tournament: idx === 0 ? 'Weekend Brawl' : idx === 1 ? 'Solo Survivor' : idx === 2 ? 'Lone Wolf Opener' : 'BR Showdown',
-            mode: p.matches > 5 ? 'BR Squad' : idx % 2 === 0 ? 'BR Solo' : 'Lone Wolf',
+            tournament: p.last_tournament || 'SYG Championship',
+            mode: p.mode || 'BR Squad',
             date: 'Recent',
-            prize: p.prize || (idx === 0 ? 1200 : idx === 1 ? 800 : 500)
+            prize: Number(p.prize || 0)
           }))
           setWinners(champs)
         }
