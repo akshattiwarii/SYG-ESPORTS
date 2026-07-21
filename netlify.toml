@@ -1,4 +1,10 @@
-# Netlify Deployment Configuration
+# Netlify Root Configuration (Overrides UI Settings)
+
+[build]
+  # Tell Netlify to go into the frontend folder to install and build
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
 
 [[redirects]]
   # Redirect and proxy all API calls to the Render backend to prevent CORS issues
