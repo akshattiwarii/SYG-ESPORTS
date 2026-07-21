@@ -1,0 +1,14 @@
+# Netlify Deployment Configuration
+
+[[redirects]]
+  # Redirect and proxy all API calls to the Render backend to prevent CORS issues
+  from = "/api/*"
+  to = "https://YOUR_RENDER_BACKEND_URL.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  # Support React Router client-side routing on page refresh
+  from = "/*"
+  to = "/index.html"
+  status = 200

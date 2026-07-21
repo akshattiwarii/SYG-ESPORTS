@@ -1,0 +1,19 @@
+{
+  "name": "ghostline-esports-platform",
+  "version": "1.0.0",
+  "description": "Ghostline esports platform with real backend and database support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.1",
+    "cors": "^2.8.0",
+    "dotenv": "^16.4.1",
+    "express": "^4.19.1",
+    "nodemailer": "^9.0.3",
+    "pg": "^8.9.0"
+  }
+}
