@@ -27,11 +27,6 @@ function Footer({ setActivePage }) {
             <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('community')}>Community</a>
           </div>
           <div>
-            <h5>Account</h5>
-            <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('dashboard')}>Dashboard</a>
-            <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('admin')}>Admin</a>
-          </div>
-          <div>
             <h5>Support</h5>
             <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('contact')}>Contact Us</a>
             <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('rules')}>Fair Play Policy</a>
