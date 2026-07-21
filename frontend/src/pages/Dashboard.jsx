@@ -139,9 +139,9 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
                 {registrations.map((r) => (
                   <div className="panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--panel-2)', border: '1px solid var(--border)' }} key={r.id}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                      <div>
-                        <div style={{ fontWeight: 700 }}>{r.tournament_title}</div>
-                        <div style={{ color: 'var(--text-faint)', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>
+                      <div style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>
+                        <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text)', wordBreak: 'break-word' }}>{r.tournament_title}</div>
+                        <div style={{ color: 'var(--text-faint)', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px', wordBreak: 'break-all' }}>
                           {r.reg_id} · {r.mode}
                         </div>
                         <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--cyan)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
