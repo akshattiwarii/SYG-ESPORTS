@@ -98,13 +98,41 @@ footer{border-top:1px solid var(--border);padding:48px 0 28px;margin-top:40px;ba
 .skel{background:linear-gradient(90deg, var(--panel) 25%, var(--panel-2) 50%, var(--panel) 75%);background-size:200% 100%;animation:skel 1.4s infinite;border-radius:10px;} @keyframes skel{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
 
 /* Mobile Dashboard Resolution Optimization */
-@media(max-width: 640px) {
+@media(max-width: 768px) {
   .dash-sidebar { padding: 14px !important; }
   .dash-profile { gap: 10px !important; }
   .dash-avatar { width: 50px !important; height: 50px !important; font-size: 18px !important; }
-  .dash-nav a { padding: 10px 12px !important; font-size: 13px !important; }
-  .kpi-row { grid-template-columns: 1fr !important; gap: 10px !important; }
-  .kpi { padding: 16px 18px !important; }
-  .kpi-label { font-size: 11px !important; letter-spacing: 0.06em !important; }
-  .kpi-value { font-size: 24px !important; }
+  
+  /* Stack Registrations button on top and Scrim Status below it */
+  .dash-nav {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .dash-nav a {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+    margin-bottom: 0 !important;
+  }
+  
+  /* Compact KPI boxes fitting mobile width */
+  .kpi-row { grid-template-columns: 1fr 1fr !important; gap: 8px !important; width: 100% !important; }
+  .kpi { padding: 10px 12px !important; }
+  .kpi-label { font-size: 9.5px !important; letter-spacing: 0.03em !important; }
+  .kpi-value { font-size: 20px !important; margin-top: 4px !important; }
+
+  /* Recent Activity table mobile auto-fit matching footer width */
+  .table-scroll {
+    overflow-x: auto !important;
+  }
+  .table-scroll .ltable {
+    min-width: 100% !important;
+    font-size: 12px !important;
+  }
+  .ltable thead th, .ltable tbody td {
+    padding: 8px 6px !important;
+  }
 }

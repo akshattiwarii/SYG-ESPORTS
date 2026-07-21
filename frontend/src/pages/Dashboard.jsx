@@ -137,9 +137,9 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
               <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Your Registrations</h3>
               <div id="dashRegistrations" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {registrations.map((r) => (
-                  <div className="panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--panel-2)', border: '1px solid var(--border)' }} key={r.id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                      <div style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>
+                  <div className="panel" style={{ padding: '14px', background: 'var(--panel-2)', border: '1px solid var(--border)', maxWidth: '100%' }} key={r.id}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                      <div style={{ width: '100%' }}>
                         <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text)', wordBreak: 'break-word' }}>{r.tournament_title}</div>
                         <div style={{ color: 'var(--text-faint)', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px', wordBreak: 'break-all' }}>
                           {r.reg_id} · {r.mode}
@@ -148,11 +148,11 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
                           Slot Assigned: #{r.slot_number || '—'}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--border)', paddingTop: '8px', flexWrap: 'wrap', width: '100%' }}>
                         {r.verified && (
                           <button 
                             className="btn btn-ghost btn-sm" 
-                            style={{ padding: '5px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', borderColor: 'var(--border-strong)' }}
+                            style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', borderColor: 'var(--border-strong)' }}
                             onClick={() => handleFetchRoomDetails(r)}
                           >
                             🔑 Lobby Info
