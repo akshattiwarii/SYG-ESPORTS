@@ -539,6 +539,9 @@ function Admin({ loggedIn, user, tournaments, registrations, openAuth, refreshDa
                   <div>
                     <b>{r.team_name || r.full_name}</b> 
                     <span style={{ color: 'var(--text-faint)', fontSize: '12px' }}> · {r.tournament_title} · {r.mode}</span>
+                    <span style={{ marginLeft: '10px', fontSize: '11.5px', background: 'var(--panel)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-strong)', fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Slot #{r.slot_number || '—'}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <span className={`badge ${r.verified ? 'badge-open' : 'badge-upcoming'}`}>{r.verified ? 'Verified' : 'Pending OTP'}</span>

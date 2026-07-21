@@ -248,6 +248,7 @@ async function initDb() {
       otp TEXT,
       verified INTEGER NOT NULL DEFAULT 0,
       user_id INTEGER,
+      slot_number INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -292,6 +293,7 @@ async function initDb() {
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS verified INTEGER DEFAULT 1",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code TEXT DEFAULT ''",
     "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS user_id INTEGER",
+    "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS slot_number INTEGER DEFAULT 0",
     "ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_id TEXT DEFAULT ''",
     "ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_pass TEXT DEFAULT ''",
     "ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_notes TEXT DEFAULT ''"
@@ -619,11 +621,15 @@ app.post('/api/register', async (req, res) => {
   const regId = `GL-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
   const playersJson = JSON.stringify(reqPlayers);
 
+  // Dynamically calculate slot number for this tournament (starting from 1)
+  const existingCountRow = await db.prepare('SELECT COUNT(*) as count FROM registrations WHERE tournament_id = ?').get(tournament.id);
+  const slotNumber = (existingCountRow ? Number(existingCountRow.count) : 0) + 1;
+
   // Insert registration (verified immediately)
   await db.prepare(`
-    INSERT INTO registrations (reg_id, tournament_id, tournament_title, mode, team_name, full_name, email, phone, discord, players_json, otp, verified, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?)
-  `).run(regId, tournament.id, tournament.title, tournament.mode, teamName || fullName, fullName, email, phone, discord || '', playersJson, userId);
+    INSERT INTO registrations (reg_id, tournament_id, tournament_title, mode, team_name, full_name, email, phone, discord, players_json, otp, verified, user_id, slot_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?, ?)
+  `).run(regId, tournament.id, tournament.title, tournament.mode, teamName || fullName, fullName, email, phone, discord || '', playersJson, userId, slotNumber);
 
   const updatedFilled = tournament.slots_filled + 1;
   let nextStatus = tournament.status;
@@ -631,7 +637,7 @@ app.post('/api/register', async (req, res) => {
   else if (updatedFilled / tournament.slots_total >= 0.85 && tournament.status === 'Open') nextStatus = 'Filling Fast';
   await db.prepare('UPDATE tournaments SET slots_filled = ?, status = ? WHERE id = ?').run(updatedFilled, nextStatus, tournament.id);
 
-  res.json({ success: true, regId, message: 'Registration successful! Your slot is verified.' });
+  res.json({ success: true, regId, slotNumber, message: 'Registration successful! Your slot is verified.' });
 });
 
 app.post('/api/verify-otp', (req, res) => {

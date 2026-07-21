@@ -142,6 +142,9 @@ function Dashboard({ loggedIn, user, registrations, openAuth }) {
                         <div style={{ color: 'var(--text-faint)', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>
                           {r.reg_id} · {r.mode}
                         </div>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--cyan)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Slot Assigned: #{r.slot_number || '—'}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {r.verified && (
