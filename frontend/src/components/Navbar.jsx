@@ -141,103 +141,105 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
               </a>
             )}
 
-            {loggedIn && (
-              <div className="nav-cta-notif" style={{ position: 'relative' }} ref={notifRef}>
-                <button 
-                  className="btn btn-ghost btn-sm notif-bell-btn"
-                  onClick={() => {
-                    setNotifOpen(!notifOpen)
-                    if (!notifOpen) fetchNotifications()
-                  }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', fontSize: '15px' }}
-                  title="Notifications"
-                >
-                  🔔
-                  {unreadNotifCount > 0 && (
-                    <span style={{ background: 'var(--orange)', color: '#160800', fontSize: '10px', fontWeight: 'bold', padding: '1px 5px', borderRadius: '99px' }}>
-                      {unreadNotifCount}
-                    </span>
-                  )}
-                </button>
+            <div className="nav-cta-notif" style={{ position: 'relative' }} ref={notifRef}>
+              <button 
+                className="btn btn-ghost btn-sm notif-bell-btn"
+                onClick={() => {
+                  if (!loggedIn) {
+                    openAuth('login')
+                    return
+                  }
+                  setNotifOpen(!notifOpen)
+                  if (!notifOpen) fetchNotifications()
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', fontSize: '15px' }}
+                title="Notifications"
+              >
+                🔔
+                {loggedIn && unreadNotifCount > 0 && (
+                  <span style={{ background: 'var(--orange)', color: '#160800', fontSize: '10px', fontWeight: 'bold', padding: '1px 5px', borderRadius: '99px' }}>
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </button>
 
-                {notifOpen && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '8px',
-                    background: 'var(--panel)',
-                    border: '1px solid var(--border-strong)',
-                    borderRadius: '12px',
-                    boxShadow: '0 12px 30px rgba(0,0,0,0.6)',
-                    zIndex: 1100,
-                    width: '320px',
-                    maxWidth: '90vw',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden'
-                  }}>
-                    <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700, fontSize: '14px' }}>Notifications</div>
-                      {unreadNotifCount > 0 && (
-                        <span 
-                          onClick={markAllRead} 
-                          style={{ color: 'var(--cyan)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
-                        >
-                          Mark all read ✓
-                        </span>
-                      )}
+              {notifOpen && loggedIn && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '8px',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: '12px',
+                  boxShadow: '0 12px 30px rgba(0,0,0,0.6)',
+                  zIndex: 1100,
+                  width: '320px',
+                  maxWidth: '90vw',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: '14px' }}>Notifications</div>
+                    {unreadNotifCount > 0 && (
+                      <span 
+                        onClick={markAllRead} 
+                        style={{ color: 'var(--cyan)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Mark all read ✓
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Browser Push Permission Banner */}
+                  {!pushGranted && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(255,145,0,0.1)', borderBottom: '1px solid var(--border)', fontSize: '11.5px', color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div>Allow browser push notifications to get live alerts when matches start or when declared a winner!</div>
+                      <button 
+                        onClick={requestPushPermission} 
+                        className="btn btn-primary btn-sm" 
+                        style={{ padding: '4px 8px', fontSize: '11px' }}
+                      >
+                        🔔 Enable Push Notifications
+                      </button>
                     </div>
+                  )}
 
-                    {/* Browser Push Permission Banner */}
-                    {!pushGranted && (
-                      <div style={{ padding: '10px 12px', background: 'rgba(255,145,0,0.1)', borderBottom: '1px solid var(--border)', fontSize: '11.5px', color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div>Allow browser push notifications to get live alerts when matches start or when declared a winner!</div>
-                        <button 
-                          onClick={requestPushPermission} 
-                          className="btn btn-primary btn-sm" 
-                          style={{ padding: '4px 8px', fontSize: '11px' }}
-                        >
-                          🔔 Enable Push Notifications
-                        </button>
+                  <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                    {notifications.map((n) => (
+                      <div 
+                        key={n.id}
+                        style={{
+                          padding: '12px 14px',
+                          borderBottom: '1px solid var(--border)',
+                          background: n.read_status ? 'transparent' : 'rgba(255,90,31,0.06)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px'
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: n.type === 'winner' ? 'var(--gold)' : 'var(--text)' }}>
+                          {n.title}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                          {n.message}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-faint)', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
+                          {new Date(n.created_at).toLocaleString('en-IN', { timeStyle: 'short', dateStyle: 'short' })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {notifications.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-faint)', fontSize: '12.5px' }}>
+                        🔔 No notifications yet.
                       </div>
                     )}
-
-                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                      {notifications.map((n) => (
-                        <div 
-                          key={n.id}
-                          style={{
-                            padding: '12px 14px',
-                            borderBottom: '1px solid var(--border)',
-                            background: n.read_status ? 'transparent' : 'rgba(255,90,31,0.06)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '3px'
-                          }}
-                        >
-                          <div style={{ fontWeight: 700, fontSize: '13px', color: n.type === 'winner' ? 'var(--gold)' : 'var(--text)' }}>
-                            {n.title}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.4 }}>
-                            {n.message}
-                          </div>
-                          <div style={{ fontSize: '10px', color: 'var(--text-faint)', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
-                            {new Date(n.created_at).toLocaleString('en-IN', { timeStyle: 'short', dateStyle: 'short' })}
-                          </div>
-                        </div>
-                      ))}
-
-                      {notifications.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-faint)', fontSize: '12.5px' }}>
-                          🔔 No notifications yet.
-                        </div>
-                      )}
-                    </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
             
             {loggedIn ? (
               <div style={{ position: 'relative' }} ref={dropdownRef}>
