@@ -379,9 +379,9 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// Auth API - Login (Supports Email, Email Prefix, or Username/IGN)
+// Auth API - Login (Supports Email, Email Prefix, Username/IGN & Single Active Session Enforcement)
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, force } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email/Username and password are required' });
   }
@@ -396,6 +396,18 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: 'Invalid username/email or password' });
   }
+
+  // Check if an active session already exists for this user
+  const activeSessions = await db.prepare('SELECT token FROM sessions WHERE user_id = ?').all(user.id);
+  if (activeSessions.length > 0 && !force) {
+    return res.status(409).json({
+      conflict: true,
+      error: 'Account is already active on another browser/device. Please terminate that session to continue.'
+    });
+  }
+
+  // Delete all existing sessions for this user (enforcing 1 single active session)
+  await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
 
   // Create session
   const token = crypto.randomUUID();

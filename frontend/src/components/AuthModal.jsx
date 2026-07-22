@@ -15,8 +15,11 @@ function AuthModal({ mode, setMode, onClose, syncSession, showToast, setActivePa
   const [otp, setOtp] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const [sessionConflict, setSessionConflict] = useState(false)
+
+  const handleSubmit = async (e, forceLogin = false) => {
+    if (e && e.preventDefault) e.preventDefault()
+    setSessionConflict(false)
 
     if (mode === 'verify') {
       if (!verificationCode.trim()) return showToast('⚠ Please enter the OTP code', 'error')
@@ -50,7 +53,7 @@ function AuthModal({ mode, setMode, onClose, syncSession, showToast, setActivePa
 
     if (!email || !password) return showToast('⚠ Email and password required', 'error')
 
-    let payload = { email, password }
+    let payload = { email, password, force: forceLogin }
     let url = '/api/auth/login'
 
     if (mode === 'signup') {
@@ -69,6 +72,11 @@ function AuthModal({ mode, setMode, onClose, syncSession, showToast, setActivePa
       const json = await res.json()
       
       if (!res.ok) {
+        if (res.status === 409 && json.conflict) {
+          setSessionConflict(true)
+          showToast('⚠ This account is currently logged in on another device.', 'error')
+          return
+        }
         if (res.status === 403 && json.verified === false) {
           setUserId(json.userId)
           setOtp(json.otp)
@@ -215,6 +223,25 @@ function AuthModal({ mode, setMode, onClose, syncSession, showToast, setActivePa
                     />
                   </div>
                 </div>
+
+                {sessionConflict && (
+                  <div style={{ background: 'rgba(255, 77, 77, 0.12)', border: '1px solid var(--red)', padding: '14px', borderRadius: '10px', marginTop: '16px', marginBottom: '10px' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '13.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>⚠️</span> Active Session Detected
+                    </div>
+                    <p style={{ fontSize: '12.5px', color: 'var(--text-dim)', margin: '0 0 12px 0', lineHeight: 1.45 }}>
+                      This account is currently logged in on another browser or device. To prevent conflicts, terminate the other active session to proceed.
+                    </p>
+                    <button 
+                      type="button" 
+                      className="btn btn-primary btn-block btn-sm"
+                      onClick={(e) => handleSubmit(e, true)}
+                      style={{ background: 'var(--red)', borderColor: 'var(--red)', color: '#fff' }}
+                    >
+                      🚪 Terminate Other Session & Log In Here
+                    </button>
+                  </div>
+                )}
 
                 <p style={{ textAlign: 'center', fontSize: '12.5px', color: 'var(--text-dim)', marginTop: '14px' }}>
                   {mode === 'login' ? (

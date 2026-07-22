@@ -147,6 +147,38 @@ function App() {
   }
 
   // Page switching router
+  // HTML5 History & Mobile Navigation helper
+  const navigateTo = (page, pushToHistory = true) => {
+    setActivePage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (pushToHistory) {
+      const stateObj = { page }
+      const url = page === 'home' ? '/' : `#${page}`
+      window.history.pushState(stateObj, '', url)
+    }
+  }
+
+  // Handle phone physical Back button & browser navigation
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '')
+    if (hash && ['tournaments', 'leaderboard', 'rules', 'community', 'contact', 'dashboard', 'admin'].includes(hash)) {
+      setActivePage(hash)
+    }
+
+    const handlePopState = (event) => {
+      if (event.state && event.state.page) {
+        setActivePage(event.state.page)
+      } else {
+        const h = window.location.hash.replace('#', '')
+        setActivePage(h || 'home')
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
   const renderPage = () => {
     switch (activePage) {
       case 'home':
@@ -157,7 +189,7 @@ function App() {
             winners={winners} 
             stats={stats}
             openRegistration={handleOpenRegistration} 
-            setActivePage={setActivePage}
+            setActivePage={navigateTo}
           />
         )
       case 'tournaments':
@@ -177,7 +209,7 @@ function App() {
       case 'rules':
         return <Rules />
       case 'community':
-        return <Community setActivePage={setActivePage} />
+        return <Community setActivePage={navigateTo} />
       case 'contact':
         return <Contact showToast={showToast} />
       case 'dashboard':
@@ -202,7 +234,7 @@ function App() {
           />
         )
       default:
-        return <Home tournaments={tournaments} leaderboard={leaderboard} winners={winners} stats={stats} openRegistration={handleOpenRegistration} setActivePage={setActivePage} />
+        return <Home tournaments={tournaments} leaderboard={leaderboard} winners={winners} stats={stats} openRegistration={handleOpenRegistration} setActivePage={navigateTo} />
     }
   }
 
@@ -210,7 +242,7 @@ function App() {
     <>
       <Navbar 
         activePage={activePage} 
-        setActivePage={setActivePage} 
+        setActivePage={navigateTo} 
         loggedIn={loggedIn} 
         user={user} 
         handleLogout={handleLogout}
@@ -218,9 +250,38 @@ function App() {
         openProfile={() => setProfileModalOpen(true)}
       />
       
+      {activePage !== 'home' && (
+        <div 
+          style={{ 
+            background: 'var(--panel)', 
+            borderBottom: '1px solid var(--border)', 
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            color: 'var(--orange-2)',
+            fontWeight: 600,
+            fontSize: '13.5px',
+            maxWidth: '1200px',
+            margin: '0 auto',
+            paddingLeft: '24px'
+          }}
+          onClick={() => {
+            if (window.history.length > 1) {
+              window.history.back()
+            } else {
+              navigateTo('home')
+            }
+          }}
+        >
+          <span>←</span> Back
+        </div>
+      )}
+      
       {renderPage()}
 
-      <Footer setActivePage={setActivePage} />
+      <Footer setActivePage={navigateTo} />
       
       {toast.visible && <Toast message={toast.message} type={toast.type} />}
 
