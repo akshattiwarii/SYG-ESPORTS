@@ -144,7 +144,7 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
             {loggedIn && (
               <div className="nav-cta-notif" style={{ position: 'relative' }} ref={notifRef}>
                 <button 
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm notif-bell-btn"
                   onClick={() => {
                     setNotifOpen(!notifOpen)
                     if (!notifOpen) fetchNotifications()
