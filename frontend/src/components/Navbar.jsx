@@ -358,23 +358,6 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
           <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('contact')}>Contact</a>
           <a href="https://web2apkpro.com/public_download.php?project_id=19997&token=b86bbd4da6" target="_blank" rel="noreferrer" style={{ color: 'var(--orange-2)', fontWeight: 700 }}>Download App 📱</a>
           {loggedIn && <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('dashboard')}>Dashboard</a>}
-          {loggedIn && (
-            <a 
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} 
-              onClick={() => {
-                setMobileOpen(false)
-                setNotifOpen(true)
-                fetchNotifications()
-              }}
-            >
-              <span>🔔 Notifications</span>
-              {unreadNotifCount > 0 && (
-                <span style={{ background: 'var(--orange)', color: '#160800', fontSize: '11px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '99px' }}>
-                  {unreadNotifCount} NEW
-                </span>
-              )}
-            </a>
-          )}
           {loggedIn && user.role === 'admin' && <a style={{ cursor: 'pointer' }} onClick={() => handleNavClick('admin')}>Admin</a>}
           {loggedIn && (
             <a 
