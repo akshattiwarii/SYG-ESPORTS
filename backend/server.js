@@ -677,6 +677,14 @@ app.post('/api/register', async (req, res) => {
   else if (updatedFilled / tournament.slots_total >= 0.85 && tournament.status === 'Open') nextStatus = 'Filling Fast';
   await db.prepare('UPDATE tournaments SET slots_filled = ?, status = ? WHERE id = ?').run(updatedFilled, nextStatus, tournament.id);
 
+  if (nextStatus === 'Filling Fast' && tournament.status !== 'Filling Fast') {
+    notifyAllPlayers(
+      `⚡ Filling Fast: ${tournament.title}`,
+      `Slots for ${tournament.title} are filling fast (${updatedFilled}/${tournament.slots_total})! Lock in your slot now!`,
+      'tournament'
+    );
+  }
+
   res.json({ success: true, regId, slotNumber, message: 'Registration successful! Your slot is verified.' });
 });
 
@@ -699,6 +707,21 @@ app.get('/api/registrations', async (req, res) => {
   }
 });
 
+// Helper to broadcast a notification to all non-admin registered players
+async function notifyAllPlayers(title, message, type = 'tournament') {
+  try {
+    const players = await db.prepare("SELECT id FROM users WHERE role != 'admin' OR role IS NULL").all();
+    for (const p of players) {
+      await db.prepare(`
+        INSERT INTO notifications (user_id, title, message, type, read_status)
+        VALUES (?, ?, ?, ?, 0)
+      `).run(p.id, title, message, type);
+    }
+  } catch (err) {
+    console.error('Failed to notify players:', err);
+  }
+}
+
 // ================= ADMIN TOURNAMENT CRUD =================
 
 app.post('/api/admin/tournaments', async (req, res) => {
@@ -709,14 +732,24 @@ app.post('/api/admin/tournaments', async (req, res) => {
 
   const id = `t-${Date.now()}`;
   const deadline = date ? `${date}, 2 hours before start` : 'TBA';
+  const tourneyStatus = status || 'Open';
 
   try {
     await db.prepare(`
       INSERT INTO tournaments (id, title, mode, date, time, prize, fee, slots_total, slots_filled, status, deadline)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-    `).run(id, title, mode, date || 'TBA', time || 'TBA', Number(prize) || 0, Number(fee) || 0, Number(slotsTotal) || 32, status || 'Open', deadline);
+    `).run(id, title, mode, date || 'TBA', time || 'TBA', Number(prize) || 0, Number(fee) || 0, Number(slotsTotal) || 32, tourneyStatus, deadline);
 
-    res.json({ success: true, tournament: { id, title, mode, date, time, prize, fee, slotsTotal, status } });
+    // Notify all players about new tournament open for registration
+    if (tourneyStatus === 'Open') {
+      notifyAllPlayers(
+        `🔥 New Tournament: ${title}`,
+        `${title} (${mode}) is now OPEN for registration! Prize Pool: ₹${prize || 0}. Secure your slot now!`,
+        'tournament'
+      );
+    }
+
+    res.json({ success: true, tournament: { id, title, mode, date, time, prize, fee, slotsTotal, status: tourneyStatus } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create tournament' });
@@ -742,7 +775,31 @@ app.patch('/api/admin/tournaments/:id/status', async (req, res) => {
   if (!status) return res.status(400).json({ error: 'Status is required' });
 
   try {
+    const tournament = await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(req.params.id);
     await db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run(status, req.params.id);
+
+    if (tournament && tournament.status !== status) {
+      if (status === 'Live') {
+        notifyAllPlayers(
+          `🔴 Tournament NOW LIVE: ${tournament.title}`,
+          `${tournament.title} (${tournament.mode}) is NOW LIVE! Matches are underway. Check live scores!`,
+          'tournament'
+        );
+      } else if (status === 'Filling Fast') {
+        notifyAllPlayers(
+          `⚡ Filling Fast: ${tournament.title}`,
+          `Slots for ${tournament.title} are 85%+ filled! Lock in your slot before registration closes.`,
+          'tournament'
+        );
+      } else if (status === 'Open') {
+        notifyAllPlayers(
+          `🔥 Registrations Open: ${tournament.title}`,
+          `Registrations for ${tournament.title} (${tournament.mode}) are now OPEN! Prize Pool: ₹${tournament.prize}.`,
+          'tournament'
+        );
+      }
+    }
+
     res.json({ success: true, message: 'Status updated successfully' });
   } catch (err) {
     console.error(err);
