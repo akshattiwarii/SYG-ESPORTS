@@ -292,6 +292,16 @@ async function initDb() {
       read_status INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT DEFAULT 'info',
+      read_status INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Migrations for existing DB tables:
@@ -785,6 +795,21 @@ app.post('/api/admin/match-results', async (req, res) => {
         points,
         prizeWon
       );
+
+      // Check if player corresponds to a registered account and trigger notification
+      const targetUser = await db.prepare('SELECT id FROM users WHERE uid = ? OR LOWER(ign) = LOWER(?)').get(row.playerUid, row.playerIgn);
+      if (targetUser) {
+        const isWinner = placement === 1;
+        const notifTitle = isWinner ? '🏆 You\'ve Been Declared Winner!' : '📊 Match Results Published';
+        const notifMsg = isWinner
+          ? `Congratulations! You scored 1st Place Champion in ${tournament.title}! Cash Prize Won: ₹${prizeWon}.`
+          : `Match results published for ${tournament.title}. You finished #${placement} with ${kills} kills (${points} pts).`;
+
+        await db.prepare(`
+          INSERT INTO notifications (user_id, title, message, type, read_status)
+          VALUES (?, ?, ?, ?, 0)
+        `).run(targetUser.id, notifTitle, notifMsg, isWinner ? 'winner' : 'tournament');
+      }
     }
     
     await db.prepare("UPDATE tournaments SET status = 'Completed' WHERE id = ?").run(tournamentId);
@@ -895,6 +920,15 @@ app.post('/api/admin/messages/send', async (req, res) => {
         INSERT INTO messages (sender_id, recipient_id, sender_name, recipient_name, message, is_broadcast, read_status)
         VALUES (?, NULL, ?, 'All Registered Players', ?, 1, 0)
       `).run(adminUser.id, adminUser.ign || 'SYG Admin', message.trim());
+
+      // Create notification for all registered players
+      const allPlayerUsers = await db.prepare("SELECT id FROM users WHERE role != 'admin'").all();
+      for (const p of allPlayerUsers) {
+        await db.prepare(`
+          INSERT INTO notifications (user_id, title, message, type, read_status)
+          VALUES (?, '📢 Broadcast Notice from Admin', ?, 'message', 0)
+        `).run(p.id, message.trim());
+      }
       
       return res.json({ success: true, message: 'Broadcast announcement sent to all users! 📢' });
     } else {
@@ -907,6 +941,12 @@ app.post('/api/admin/messages/send', async (req, res) => {
         INSERT INTO messages (sender_id, recipient_id, sender_name, recipient_name, message, is_broadcast, read_status)
         VALUES (?, ?, ?, ?, ?, 0, 0)
       `).run(adminUser.id, targetUser.id, adminUser.ign || 'SYG Admin', targetUser.ign || targetUser.email, message.trim());
+
+      // Create direct notification for recipient user
+      await db.prepare(`
+        INSERT INTO notifications (user_id, title, message, type, read_status)
+        VALUES (?, '💬 New Message from SYG Admin', ?, 'message', 0)
+      `).run(targetUser.id, message.trim());
 
       return res.json({ success: true, message: `Message sent to ${targetUser.ign || targetUser.email}! 💬` });
     }
@@ -965,6 +1005,55 @@ app.post('/api/messages/:id/read', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update read status' });
+  }
+});
+
+// ================= NOTIFICATION SYSTEM API =================
+
+// User: Get Notifications
+app.get('/api/notifications', async (req, res) => {
+  const user = await getLoggedInUser(req);
+  if (!user) return res.json([]);
+
+  try {
+    const rows = await db.prepare(`
+      SELECT * FROM notifications 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 30
+    `).all(user.id);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// User: Mark Notification as Read
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const user = await getLoggedInUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    await db.prepare('UPDATE notifications SET read_status = 1 WHERE id = ? AND user_id = ?').run(req.params.id, user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+// User: Mark All Notifications as Read
+app.post('/api/notifications/read-all', async (req, res) => {
+  const user = await getLoggedInUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    await db.prepare('UPDATE notifications SET read_status = 1 WHERE user_id = ?').run(user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to mark all as read' });
   }
 });
 
@@ -1084,6 +1173,19 @@ app.post('/api/admin/tournaments/:id/room', async (req, res) => {
       SET room_id = ?, room_pass = ?, room_notes = ?
       WHERE id = ?
     `).run(roomId || '', roomPass || '', roomNotes || '', id);
+
+    const tournament = await db.prepare('SELECT title FROM tournaments WHERE id = ?').get(id);
+    const tourneyTitle = tournament ? tournament.title : 'Tournament';
+
+    // Trigger notification to all verified participants of this tournament
+    const regs = await db.prepare('SELECT DISTINCT user_id FROM registrations WHERE tournament_id = ? AND verified = 1 AND user_id IS NOT NULL').all(id);
+    for (const r of regs) {
+      await db.prepare(`
+        INSERT INTO notifications (user_id, title, message, type, read_status)
+        VALUES (?, '🔑 Lobby Credentials Released!', ?, 'tournament', 0)
+      `).run(r.user_id, `Lobby Room ID & Password for ${tourneyTitle} have been released. Match starts in 30 minutes! Check your Dashboard.`);
+    }
+
     res.json({ success: true, message: 'Lobby credentials updated successfully' });
   } catch (err) {
     console.error(err);

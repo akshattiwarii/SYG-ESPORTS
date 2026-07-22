@@ -25,16 +25,80 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
     }
   }, [mobileOpen])
 
-  // Close dropdown when clicking outside
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [pushGranted, setPushGranted] = useState(false)
+  const notifRef = useRef(null)
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!loggedIn) return
+    try {
+      const res = await fetch('/api/notifications')
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch notifications', e)
+    }
+  }
+
+  useEffect(() => {
+    if (loggedIn) {
+      fetchNotifications()
+      const interval = setInterval(fetchNotifications, 15000)
+      return () => clearInterval(interval)
+    }
+  }, [loggedIn])
+
+  useEffect(() => {
+    if ('Notification' in window) {
+      setPushGranted(Notification.permission === 'granted')
+    }
+  }, [])
+
+  const requestPushPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('Browser push notifications are not supported on this device/browser.')
+      return
+    }
+    const permission = await Notification.requestPermission()
+    if (permission === 'granted') {
+      setPushGranted(true)
+      try {
+        new Notification('SYG ESPORTS 🏆', {
+          body: 'Push notifications enabled! You will receive live alerts for match starts and winner declarations.',
+          icon: '/syg_logo.jpg'
+        })
+      } catch (e) {}
+    }
+  }
+
+  const markAllRead = async () => {
+    try {
+      await fetch('/api/notifications/read-all', { method: 'POST' })
+      setNotifications(prev => prev.map(n => ({ ...n, read_status: 1 })))
+    } catch (e) {
+      console.error('Failed to mark read all', e)
+    }
+  }
+
+  const unreadNotifCount = notifications.filter(n => !n.read_status).length
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownOpen && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setDropdownOpen(false)
       }
+      if (notifOpen && notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [dropdownOpen])
+  }, [dropdownOpen, notifOpen])
 
   const initials = (str) => {
     return (str || 'PL')
@@ -75,6 +139,104 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
               <a className={`btn btn-primary btn-sm ${activePage === 'admin' ? 'active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('admin')}>
                 Admin
               </a>
+            )}
+
+            {loggedIn && (
+              <div style={{ position: 'relative' }} ref={notifRef}>
+                <button 
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setNotifOpen(!notifOpen)
+                    if (!notifOpen) fetchNotifications()
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', fontSize: '15px' }}
+                  title="Notifications"
+                >
+                  🔔
+                  {unreadNotifCount > 0 && (
+                    <span style={{ background: 'var(--orange)', color: '#160800', fontSize: '10px', fontWeight: 'bold', padding: '1px 5px', borderRadius: '99px' }}>
+                      {unreadNotifCount}
+                    </span>
+                  )}
+                </button>
+
+                {notifOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '8px',
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: '12px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.6)',
+                    zIndex: 1100,
+                    width: '320px',
+                    maxWidth: '90vw',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontWeight: 700, fontSize: '14px' }}>Notifications</div>
+                      {unreadNotifCount > 0 && (
+                        <span 
+                          onClick={markAllRead} 
+                          style={{ color: 'var(--cyan)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Mark all read ✓
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Browser Push Permission Banner */}
+                    {!pushGranted && (
+                      <div style={{ padding: '10px 12px', background: 'rgba(255,145,0,0.1)', borderBottom: '1px solid var(--border)', fontSize: '11.5px', color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div>Allow browser push notifications to get live alerts when matches start or when declared a winner!</div>
+                        <button 
+                          onClick={requestPushPermission} 
+                          className="btn btn-primary btn-sm" 
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
+                        >
+                          🔔 Enable Push Notifications
+                        </button>
+                      </div>
+                    )}
+
+                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                      {notifications.map((n) => (
+                        <div 
+                          key={n.id}
+                          style={{
+                            padding: '12px 14px',
+                            borderBottom: '1px solid var(--border)',
+                            background: n.read_status ? 'transparent' : 'rgba(255,90,31,0.06)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, fontSize: '13px', color: n.type === 'winner' ? 'var(--gold)' : 'var(--text)' }}>
+                            {n.title}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                            {n.message}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-faint)', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
+                            {new Date(n.created_at).toLocaleString('en-IN', { timeStyle: 'short', dateStyle: 'short' })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {notifications.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-faint)', fontSize: '12.5px' }}>
+                          🔔 No notifications yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             
             {loggedIn ? (
