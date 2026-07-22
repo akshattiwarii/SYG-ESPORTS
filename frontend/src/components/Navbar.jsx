@@ -129,108 +129,12 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
             <a className={activePage === 'contact' ? 'active' : ''} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('contact')}>Contact</a>
             <a href="https://web2apkpro.com/public_download.php?project_id=19997&token=b86bbd4da6" target="_blank" rel="noreferrer" style={{ color: 'var(--orange-2)', fontWeight: 700 }}>Download App 📱</a>
           </div>
-          <div className="nav-cta">
-            {loggedIn && (
-              <a className={`btn btn-ghost btn-sm ${activePage === 'dashboard' ? 'active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('dashboard')}>
-                Dashboard
-              </a>
-            )}
-            {loggedIn && user.role === 'admin' && (
-              <a className={`btn btn-primary btn-sm ${activePage === 'admin' ? 'active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('admin')}>
-                Admin
-              </a>
-            )}
-
-            {loggedIn ? (
-              <div style={{ position: 'relative' }} ref={dropdownRef}>
-                <button 
-                  id="authBtn" 
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
-                >
-                  {user.avatar ? (
-                    <img 
-                      src={user.avatar} 
-                      style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', display: 'block', border: '1px solid var(--border)' }} 
-                      alt="" 
-                    />
-                  ) : (
-                    <span>{initials(user.ign || user.name)}</span>
-                  )}
-                  <span style={{ fontSize: '9px', opacity: 0.6 }}>▼</span>
-                </button>
-
-                {dropdownOpen && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '8px',
-                    background: 'var(--panel)',
-                    border: '1px solid var(--border-strong)',
-                    borderRadius: '10px',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                    zIndex: 1000,
-                    minWidth: '160px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden'
-                  }}>
-                    <a 
-                      onClick={() => {
-                        setDropdownOpen(false)
-                        openProfile()
-                      }} 
-                      style={{
-                        padding: '12px 16px',
-                        color: 'var(--text)',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                        transition: 'background 0.2s',
-                        display: 'block'
-                      }}
-                      onMouseEnter={e => e.target.style.background = 'var(--panel-2)'}
-                      onMouseLeave={e => e.target.style.background = 'transparent'}
-                    >
-                      Profile Details 👤
-                    </a>
-                    <a 
-                      onClick={() => {
-                        setDropdownOpen(false)
-                        handleLogout()
-                      }} 
-                      style={{
-                        padding: '12px 16px',
-                        color: 'var(--orange-2)',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        transition: 'background 0.2s',
-                        display: 'block'
-                      }}
-                      onMouseEnter={e => e.target.style.background = 'var(--panel-2)'}
-                      onMouseLeave={e => e.target.style.background = 'transparent'}
-                    >
-                      Logout 🚪
-                    </a>
-                  </div>
-                )}
-              </div>
-            ) : (
+          {/* Header Action Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Permanent Notification Bell (Always Visible on Mobile & Desktop to the left of Hamburger) */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={notifRef}>
               <button 
-                id="authBtn" 
-                className="btn btn-ghost btn-sm"
-                onClick={() => openAuth('login')}
-              >
-                Login
-              </button>
-            )}
-
-            <div className="nav-cta-notif" style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={notifRef}>
-              <button 
-                id="headerNotifBell"
-                className="btn btn-ghost btn-sm notif-bell-btn"
+                id="headerNotifBellBtn"
                 onClick={() => {
                   if (!loggedIn) {
                     openAuth('login')
@@ -239,7 +143,18 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
                   setNotifOpen(!notifOpen)
                   if (!notifOpen) fetchNotifications()
                 }}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', fontSize: '15px' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '7px 11px',
+                  fontSize: '16px',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: '8px',
+                  color: 'var(--text)',
+                  cursor: 'pointer'
+                }}
                 title="Notifications"
               >
                 🔔
@@ -328,7 +243,106 @@ function Navbar({ activePage, setActivePage, loggedIn, user, handleLogout, openA
               )}
             </div>
 
-            <button className="nav-toggle btn-ghost btn-sm" onClick={() => setMobileOpen(true)}>☰</button>
+            <div className="nav-cta">
+              {loggedIn && (
+                <a className={`btn btn-ghost btn-sm ${activePage === 'dashboard' ? 'active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('dashboard')}>
+                  Dashboard
+                </a>
+              )}
+              {loggedIn && user.role === 'admin' && (
+                <a className={`btn btn-primary btn-sm ${activePage === 'admin' ? 'active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => handleNavClick('admin')}>
+                  Admin
+                </a>
+              )}
+
+              {loggedIn ? (
+                <div style={{ position: 'relative' }} ref={dropdownRef}>
+                  <button 
+                    id="authBtn" 
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
+                  >
+                    {user.avatar ? (
+                      <img 
+                        src={user.avatar} 
+                        style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', display: 'block', border: '1px solid var(--border)' }} 
+                        alt="" 
+                      />
+                    ) : (
+                      <span>{initials(user.ign || user.name)}</span>
+                    )}
+                    <span style={{ fontSize: '9px', opacity: 0.6 }}>▼</span>
+                  </button>
+
+                  {dropdownOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: '8px',
+                      background: 'var(--panel)',
+                      border: '1px solid var(--border-strong)',
+                      borderRadius: '10px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                      zIndex: 1000,
+                      minWidth: '160px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden'
+                    }}>
+                      <a 
+                        onClick={() => {
+                          setDropdownOpen(false)
+                          openProfile()
+                        }} 
+                        style={{
+                          padding: '12px 16px',
+                          color: 'var(--text)',
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid var(--border)',
+                          transition: 'background 0.2s',
+                          display: 'block'
+                        }}
+                        onMouseEnter={e => e.target.style.background = 'var(--panel-2)'}
+                        onMouseLeave={e => e.target.style.background = 'transparent'}
+                      >
+                        Profile Details 👤
+                      </a>
+                      <a 
+                        onClick={() => {
+                          setDropdownOpen(false)
+                          handleLogout()
+                        }} 
+                        style={{
+                          padding: '12px 16px',
+                          color: 'var(--orange-2)',
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s',
+                          display: 'block'
+                        }}
+                        onMouseEnter={e => e.target.style.background = 'var(--panel-2)'}
+                        onMouseLeave={e => e.target.style.background = 'transparent'}
+                      >
+                        Logout 🚪
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button 
+                  id="authBtn" 
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => openAuth('login')}
+                >
+                  Login
+                </button>
+              )}
+
+              <button className="nav-toggle btn-ghost btn-sm" onClick={() => setMobileOpen(true)}>☰</button>
+            </div>
           </div>
         </div>
       </nav>
